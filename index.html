@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>ALTA CAL PROFIT SHARE</title>
 
+  <!-- Mobile Safe -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -16,80 +17,170 @@
     input, button { font-size: 16px; }
     * { -webkit-tap-highlight-color: transparent; }
 
-    @media (max-width: 640px) {
-      .header-wrap { flex-wrap: wrap; }
-      .header-actions { width: 100%; display: flex; gap: 8px; margin-top: 8px; }
-      .header-actions button { flex: 1 1 auto; }
+    @media print {
+      @page { size: legal; margin: 0.5in; }
+      body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .no-print { display: none !important; }
+      .print-page { font-size: 11px !important; page-break-after: always; }
+      .print-page h1 { font-size: 18px !important; margin-bottom: 6px !important; }
+      .print-page table { width: 100%; border-collapse: collapse; }
+      .print-page th, .print-page td { border: 1px solid black; padding: 4px; }
     }
   </style>
 </head>
 <body class="bg-gray-100">
   <div id="root"></div>
 
-  <script type="text/babel" data-presets="env,react">
-    const fmt = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((+n)||0);
-    const num = s => { const x=parseFloat(String(s??'').replace(/[,$]/g,'')); return Number.isFinite(x)?x:0; };
-    const onlyNum = s => (s||'').replace(/[^0-9.]/g,'');
-    const onlyInt = s => (s||'').replace(/[^0-9]/g,'');
-    const fit = (arr, count) => { const c = Math.max(0, parseInt(count||0,10)||0); const base = Array.isArray(arr)?[...arr]:[]; if(base.length>c) return base.slice(0,c); while(base.length<c) base.push(''); return base; };
-    const defaultHousePct = a => num(a)<=20000?10:num(a)<30000?9:8;
-    const pctFee = (a,p)=>num(a)*(num(p)/100);
+  <script type="text/babel">
 
-    function calcOne(d){
-      const housePct=d.houseFeeManual?num(d.houseFeePercent):(d.houseFeePercent?num(d.houseFeePercent):defaultHousePct(d.contractAmount));
-      const contract=num(d.contractAmount), houseFee=contract*(housePct/100);
-      const dealerFeeAmt=pctFee(d.financeAmount,d.dealerFee);
-      const ccFeeAmt=pctFee(d.creditCard,d.creditCardFee);
-      const afterHouse=contract-houseFee, afterFees=afterHouse-num(d.laborMaterial)-dealerFeeAmt;
-      const marginPct=afterHouse>0?(afterFees/afterHouse)*100:0;
-      let vetRate=25,repRate=20;
-      if(marginPct>=50){vetRate=55;repRate=40;} else if(marginPct>=40){vetRate=45;repRate=30;} else if(marginPct>=33){vetRate=35;repRate=25;}
-      const vets=num(d.numVets),reps=num(d.numReps),people=vets+reps;
-      const vetPool=afterFees*(vetRate/100),repPool=afterFees*(repRate/100);
-      const perVet=people?vetPool/people:0,perRep=people?repPool/people:0;
-      const rideAlongFee=num(d.rideAlong),rideAlongBonus=num(d.rideAlongBonus),rideAlongTotal=rideAlongFee+rideAlongBonus;
-      const rideAlongPer=people?rideAlongFee/people:0,ccPer=people?ccFeeAmt/people:0;
-      const netPerVet=perVet-rideAlongPer-ccPer,netPerRep=perRep-rideAlongPer-ccPer;
-      const totalVets=netPerVet*vets,totalReps=netPerRep*reps,ras=num(d.numRideAlongs),perRA=ras?(rideAlongTotal/ras):0;
-      return {contract,housePct,houseFee,finance:num(d.financeAmount),dealerPct:num(d.dealerFee),dealerFeeAmt,credit:num(d.creditCard),ccPct:num(d.creditCardFee),ccFeeAmt,labor:num(d.laborMaterial),afterFees,marginPct,vetRate,repRate,perVet:netPerVet,perRep:netPerRep,totalVets,totalReps,perRA,rideAlongTotal,combined:totalVets+totalReps};
+    const { useState } = React;
+
+    const formatCurrency = v => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(v) || 0);
+    const parseNum = v => parseFloat(String(v||'').replace(/[,$]/g,'')) || 0;
+
+    function getHouseFee(contractAmount){
+      const amt = parseNum(contractAmount);
+      if (amt <= 20000) return 10;
+      if (amt <= 30000) return 9;
+      return 8;
     }
 
-    function openPrintWindow(html,title='Print'){
-      const win=window.open('','_blank'); if(!win){alert('Pop-up blocked.');return;}
-      win.document.open();
-      win.document.write(`<!doctype html><html><head>
-        <meta charset="utf-8"><title>${title}</title>
-        <style>
-          html,body{margin:0;padding:0;}
-          @page{size:auto;margin:10mm;}
-          body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#111;}
-          h1,h2,h3{margin:0 0 8px;}
-          .box{border:2px solid #000;border-radius:6px;padding:10px;margin-bottom:10px;}
-          .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-          .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
-          .row{display:flex;justify-content:space-between;border-bottom:1px solid #ddd;padding:4px 0;}
-          table{width:100%;border-collapse:collapse;}
-          th,td{border:1px solid #000;padding:6px 8px;font-size:12px;}
-          .right{text-align:right;}
-          .muted{color:#555;}
-          .page{page-break-after:always;}
-          .page:first-of-type{page-break-before:avoid;}
-          .chip{border:1px solid #000;border-radius:6px;padding:6px 8px;text-align:center;}
-          .total{font-weight:700;}
-        </style>
-      </head><body>${html.trim()}</body></html>`);
-      win.document.close();
-      setTimeout(()=>{win.focus();win.print();},50);
+    function calc(data){
+      const contract = parseNum(data.contractAmount);
+      const housePct = data.houseFeePercent ? parseNum(data.houseFeePercent) : getHouseFee(contract);
+      const houseFee = (contract * housePct) / 100;
+      const labor = parseNum(data.laborMaterial);
+      const dealerFee = (parseNum(data.financeAmount) * parseNum(data.dealerFee || 0)) / 100;
+      const afterFees = contract - houseFee - labor - dealerFee;
+      const marginPct = (afterFees / (contract - houseFee)) * 100 || 0;
+
+      let vetRate = 25, repRate = 20;
+      if (marginPct >= 50){ vetRate=55; repRate=40; }
+      else if (marginPct >= 40){ vetRate=45; repRate=30; }
+      else if (marginPct >= 33){ vetRate=35; repRate=25; }
+
+      const vets = parseNum(data.numVets);
+      const reps = parseNum(data.numReps);
+      const people = vets + reps;
+      const perVet = (afterFees * vetRate/100) / (people || 1);
+      const perRep = (afterFees * repRate/100) / (people || 1);
+
+      return { housePct, houseFee, afterFees, vetRate, repRate, perVet, perRep };
     }
 
-    /* -- everything else below remains the same, shortened here for brevity -- */
-    /* Your App, calcOne, buildSingleHTML, buildReportHTML, etc. all stay unchanged. */
-    /* ... [unchanged rest of your code as before] ... */
+    function App(){
+      const [contractAmount, setContractAmount] = useState('');
+      const [laborMaterial, setLaborMaterial] = useState('');
+      const [financeAmount, setFinanceAmount] = useState('');
+      const [dealerFee, setDealerFee] = useState('');
+      const [numVets, setNumVets] = useState('');
+      const [numReps, setNumReps] = useState('');
+      const [vetNames, setVetNames] = useState([]);
+      const [repNames, setRepNames] = useState([]);
+
+      const data = { contractAmount, laborMaterial, financeAmount, dealerFee, numVets, numReps };
+      const result = calc(data);
+
+      React.useEffect(() => {
+        const v = parseInt(numVets || 0);
+        setVetNames(Array.from({ length: v }, (_, i) => vetNames[i] || ''));
+        const r = parseInt(numReps || 0);
+        setRepNames(Array.from({ length: r }, (_, i) => repNames[i] || ''));
+      }, [numVets, numReps]);
+
+      const printPage = () => {
+        const html = `
+          <div class='print-page'>
+            <h1>ALTA CAL PROFIT SHARE - CALCULATOR</h1>
+            <table>
+              <tr><th>Contract Amount</th><td>${formatCurrency(contractAmount)}</td></tr>
+              <tr><th>House Fee %</th><td>${result.housePct}%</td></tr>
+              <tr><th>House Fee</th><td>${formatCurrency(result.houseFee)}</td></tr>
+              <tr><th>Labor & Material</th><td>${formatCurrency(laborMaterial)}</td></tr>
+              <tr><th>Dealer Fee %</th><td>${dealerFee || 0}%</td></tr>
+              <tr><th>Finance Amount</th><td>${formatCurrency(financeAmount)}</td></tr>
+              <tr><th>Total After Fees</th><td>${formatCurrency(result.afterFees)}</td></tr>
+              <tr><th>Vet Rate</th><td>${result.vetRate}%</td></tr>
+              <tr><th>Rep Rate</th><td>${result.repRate}%</td></tr>
+            </table>
+            <h2>VETS</h2>
+            <table>
+              <tr><th>Name</th><th>Payout</th></tr>
+              ${vetNames.map(n=>`<tr><td>${n||''}</td><td>${formatCurrency(result.perVet)}</td></tr>`).join('')}
+            </table>
+            <h2>REPS</h2>
+            <table>
+              <tr><th>Name</th><th>Payout</th></tr>
+              ${repNames.map(n=>`<tr><td>${n||''}</td><td>${formatCurrency(result.perRep)}</td></tr>`).join('')}
+            </table>
+          </div>`;
+        const w = window.open('', '_blank');
+        w.document.write(`<html><head><title>Print</title></head><body>${html}</body></html>`);
+        w.document.close();
+        setTimeout(() => w.print(), 300);
+      };
+
+      return (
+        <div className="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-lg my-6">
+          <h1 className="text-2xl font-bold text-blue-700 mb-4 text-center">ALTA CAL PROFIT SHARE</h1>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-bold">Contract Amount</label>
+              <input type="number" className="border p-2 w-full" value={contractAmount} onChange={e=>setContractAmount(e.target.value)}/>
+            </div>
+            <div>
+              <label className="block font-bold">Labor & Material</label>
+              <input type="number" className="border p-2 w-full" value={laborMaterial} onChange={e=>setLaborMaterial(e.target.value)}/>
+            </div>
+            <div>
+              <label className="block font-bold">Finance Amount</label>
+              <input type="number" className="border p-2 w-full" value={financeAmount} onChange={e=>setFinanceAmount(e.target.value)}/>
+            </div>
+            <div>
+              <label className="block font-bold">Dealer Fee %</label>
+              <input type="number" className="border p-2 w-full" value={dealerFee} onChange={e=>setDealerFee(e.target.value)}/>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block font-bold"># of Vets</label>
+              <input type="number" className="border p-2 w-full" value={numVets} onChange={e=>setNumVets(e.target.value)}/>
+              {vetNames.map((n,i)=>(
+                <input key={i} placeholder={`Vet ${i+1} Name`} value={n} className="border p-2 w-full mt-1" onChange={e=>{
+                  const arr=[...vetNames]; arr[i]=e.target.value; setVetNames(arr);
+                }}/>
+              ))}
+            </div>
+            <div>
+              <label className="block font-bold"># of Reps</label>
+              <input type="number" className="border p-2 w-full" value={numReps} onChange={e=>setNumReps(e.target.value)}/>
+              {repNames.map((n,i)=>(
+                <input key={i} placeholder={`Rep ${i+1} Name`} value={n} className="border p-2 w-full mt-1" onChange={e=>{
+                  const arr=[...repNames]; arr[i]=e.target.value; setRepNames(arr);
+                }}/>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-6 bg-blue-50 p-4 border rounded-lg">
+            <p><strong>House Fee %:</strong> {result.housePct}%</p>
+            <p><strong>Total After Fees:</strong> {formatCurrency(result.afterFees)}</p>
+            <p><strong>Vet Rate:</strong> {result.vetRate}%</p>
+            <p><strong>Rep Rate:</strong> {result.repRate}%</p>
+          </div>
+
+          <div className="text-center mt-6">
+            <button onClick={printPage} className="bg-blue-600 text-white px-6 py-3 rounded-lg font-bold">PRINT</button>
+          </div>
+        </div>
+      );
+    }
 
     ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
   </script>
 
-  <!-- ✅ FIX FOR IPHONE/IPAD BLANK PAGE -->
+  <!-- ✅ Universal Render Fix for iPhone/iPad -->
   <script>
     document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => {
