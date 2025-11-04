@@ -7,9 +7,15 @@
 
   <!-- iOS niceties -->
   <meta name="apple-mobile-web-app-capable" content="yes">
+
+  <!-- Tailwind (CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React 18 UMD (prod) BEFORE Babel so globals exist for JSX transform output -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel Standalone for JSX in the browser -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
@@ -21,11 +27,33 @@
       .header-actions { width: 100%; display: flex; gap: 8px; margin-top: 8px; }
       .header-actions button { flex: 1 1 auto; }
     }
+
+    /* Tiny runtime-error banner to avoid blank page */
+    #errbox { display:none; position:fixed; inset:0 0 auto 0; background:#7f1d1d; color:#fff; padding:10px 14px; font-family:system-ui, -apple-system, Segoe UI, Arial, sans-serif; z-index:9999; }
+    #errbox b { color:#fff; }
+    #root { min-height: 100vh; }
   </style>
 </head>
 <body class="bg-gray-100">
+  <div id="errbox"></div>
   <div id="root"></div>
 
+  <script>
+    // Show errors instead of a blank page (helps on GitHub Pages)
+    window.addEventListener('error', function(e){
+      var box = document.getElementById('errbox');
+      box.innerHTML = '<b>Runtime error:</b> ' + (e && e.message ? e.message : 'Unknown error');
+      box.style.display = 'block';
+    });
+    window.addEventListener('unhandledrejection', function(e){
+      var box = document.getElementById('errbox');
+      var msg = e && e.reason && (e.reason.message || e.reason.toString()) || 'Unhandled promise rejection';
+      box.innerHTML = '<b>Runtime error:</b> ' + msg;
+      box.style.display = 'block';
+    });
+  </script>
+
+  <!-- App -->
   <script type="text/babel" data-presets="env,react">
     const fmt = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((+n)||0);
     const num = s => { const x=parseFloat(String(s??'').replace(/[,$]/g,'')); return Number.isFinite(x)?x:0; };
@@ -46,15 +74,18 @@
       const labor    = num(d.laborMaterial);
       const ride     = num(d.rideAlong);
 
+      // Dealer fee by rule: Contract - Net
       const dealerFeeAmt = Math.max(contract - net, 0);
       const dealerPct    = contract>0 ? (dealerFeeAmt/contract)*100 : 0;
 
+      // Totals
       const afterHouse = contract - houseAmt;
       const afterFees  = afterHouse - labor - dealerFeeAmt - ride;
 
+      // Margin% drives tiers
       const marginPct = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
 
-      // Tier schedules
+      // Tier schedules (unchanged)
       let vetRate=25, repRate=20;
       if (marginPct>=50){ vetRate=55; repRate=40; }
       else if (marginPct>=40){ vetRate=45; repRate=30; }
@@ -71,7 +102,6 @@
       const perVet = people>0 ? vetPool/people : 0;
       const perRep = people>0 ? repPool/people : 0;
 
-      // Ride-along payout is informational (already subtracted in AfterFees)
       const raCount = num(d.numRideAlongs);
       const perRA   = raCount>0 ? (ride/raCount) : 0;
 
@@ -296,7 +326,7 @@
                 <div key={i} className={`flex items-center justify-between border rounded px-3 py-2 bg-white ${colorBox}`}>
                   <input className="flex-1 mr-2 outline-none" placeholder={`${label} ${i+1} Name`} value={n||''}
                          onChange={e=>setName(i,e.target.value)}/>
-                  <div className="font-extrabold">${fmt(per).slice(1)}</div>
+                  <div className="font-extrabold">{fmt(per)}</div>
                 </div>
               ))}
             </div>
