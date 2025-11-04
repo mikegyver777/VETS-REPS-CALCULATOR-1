@@ -4,17 +4,14 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>ALTA CAL PROFIT SHARE</title>
-
-  <!-- iOS niceties -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
   <style>
     html { -webkit-text-size-adjust: 100%; }
-    input, button { font-size: 16px; } /* stop iOS zoom */
+    input, button { font-size: 16px; }
     * { -webkit-tap-highlight-color: transparent; }
     @media (max-width: 640px) {
       .header-wrap { flex-wrap: wrap; }
@@ -25,8 +22,9 @@
 </head>
 <body class="bg-gray-100">
   <div id="root"></div>
-
-  <script type="text/babel" data-presets="env,react">
+  <script type="text/babel">
+    const { useState } = React;
+    
     const fmt = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((+n)||0);
     const num = s => { const x=parseFloat(String(s??'').replace(/[,$]/g,'')); return Number.isFinite(x)?x:0; };
     const onlyNum = s => (s||'').replace(/[^0-9.]/g,'');
@@ -41,43 +39,30 @@
 
     function calcOne(d){
       const contract = num(d.contractAmount);
-      const net      = Math.min(num(d.netAmount)||0, contract||0);  // clamp to contract
+      const net = Math.min(num(d.netAmount)||0, contract||0);
       const houseAmt = Math.min(num(d.houseFeeAmount)||0, contract||0);
-      const labor    = num(d.laborMaterial);
-      const ride     = num(d.rideAlong);
-
+      const labor = num(d.laborMaterial);
+      const ride = num(d.rideAlong);
       const dealerFeeAmt = Math.max(contract - net, 0);
-      const dealerPct    = contract>0 ? (dealerFeeAmt/contract)*100 : 0;
-
+      const dealerPct = contract>0 ? (dealerFeeAmt/contract)*100 : 0;
       const afterHouse = contract - houseAmt;
-      const afterFees  = afterHouse - labor - dealerFeeAmt - ride;
-
+      const afterFees = afterHouse - labor - dealerFeeAmt - ride;
       const marginPct = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
-
-      // Tier schedules (unchanged)
       let vetRate=25, repRate=20;
       if (marginPct>=50){ vetRate=55; repRate=40; }
       else if (marginPct>=40){ vetRate=45; repRate=30; }
       else if (marginPct>=33){ vetRate=35; repRate=25; }
-
       const vets = num(d.numVets), reps = num(d.numReps);
       const people = vets + reps;
-
-      // Pools from AfterFees
       const base = Math.max(afterFees,0);
       const vetPool = base*(vetRate/100);
       const repPool = base*(repRate/100);
-
       const perVet = people>0 ? vetPool/people : 0;
       const perRep = people>0 ? repPool/people : 0;
-
-      // Ride-along payout is informational (already subtracted in AfterFees)
       const raCount = num(d.numRideAlongs);
-      const perRA   = raCount>0 ? (ride/raCount) : 0;
-
+      const perRA = raCount>0 ? (ride/raCount) : 0;
       const totalVets = perVet*vets;
       const totalReps = perRep*reps;
-
       return {
         contract, net, houseAmt, labor, ride,
         dealerFeeAmt, dealerPct,
@@ -88,7 +73,6 @@
       };
     }
 
-    /* ---------- Icons ---------- */
     const Icon = ({children,size=18}) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -96,9 +80,8 @@
       </svg>
     );
     const Printer = () => (<Icon><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></Icon>);
-    const Plus    = () => (<Icon><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>);
+    const Plus = () => (<Icon><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>);
 
-    /* ---------- Print helpers (new window) ---------- */
     function openPrintWindow(html, title='Print'){
       const win = window.open('', '_blank');
       if(!win){ alert('Pop-up blocked. Allow pop-ups for printing.'); return; }
@@ -127,51 +110,41 @@
       setTimeout(()=>{ win.focus(); win.print(); }, 50);
     }
 
-    /* ---------- Build print HTML ---------- */
     function buildSingleHTML(row, index){
       const c = calcOne(row);
       const vets = fit(row.vetNames,row.numVets);
       const reps = fit(row.repNames,row.numReps);
-      const ras  = fit(row.rideAlongNames,row.numRideAlongs);
-
+      const ras = fit(row.rideAlongNames,row.numRideAlongs);
       const listHTML = (title, names, per) => names.length===0 ? '' : `
         <div class="box">
           <div class="muted" style="font-weight:700;margin-bottom:6px">${title} (Per: ${fmt(per)})</div>
           ${names.map((n,i)=>`<div class="row"><div>${n||`${title.slice(0,-1)} ${i+1}`}</div><div class="right"><b>${fmt(per)}</b></div></div>`).join('')}
           <div class="row"><div class="total">Total ${title}:</div><div class="right total">${fmt(per*names.length)}</div></div>
         </div>`;
-
       return `
         <div class="page">
           <h2 style="text-align:center;font-size:18px;margin-bottom:8px">ALTA CAL — CALCULATOR #${index+1}</h2>
-
           <div class="box grid2">
             <div><b>Customer:</b> ${row.customerName||'N/A'}</div>
             <div><b>Job#:</b> ${row.jobNumber||'N/A'}</div>
           </div>
-
           <div class="box">
             <div class="muted" style="font-weight:700;margin-bottom:6px">CONTRACT & FEE BREAKDOWN</div>
             <div class="grid2">
               <div><b>Contract:</b> ${fmt(c.contract)}</div>
               <div><b>House Fee (Amt):</b> ${fmt(c.houseAmt)}</div>
-
               <div><b>Net Amount:</b> ${fmt(c.net)}</div>
               <div><b>Dealer Fee:</b> ${fmt(c.dealerFeeAmt)} (${(c.dealerPct||0).toFixed(2)}%)</div>
-
               <div><b>Labor & Material:</b> ${fmt(c.labor)}</div>
               <div><b>Ride Along (Total):</b> ${fmt(c.ride)}</div>
-
               <div class="right"><b>Total After Fees:</b> ${fmt(c.afterFees)}</div>
             </div>
           </div>
-
           <div class="grid3" style="margin-bottom:10px">
             <div class="chip"><div class="muted">VETS %</div><div style="font-weight:700">${c.vetRate}%</div></div>
             <div class="chip"><div class="muted">REPS %</div><div style="font-weight:700">${c.repRate}%</div></div>
             <div class="chip"><div class="muted">MARGIN %</div><div style="font-weight:700">${(c.marginPct||0).toFixed(1)}%</div></div>
           </div>
-
           ${listHTML('VETS', vets, c.perVet)}
           ${listHTML('REPS', reps, c.perRep)}
           ${ras.length ? `
@@ -179,7 +152,6 @@
               <div class="muted" style="font-weight:700;margin-bottom:6px">RIDE ALONGS (Per: ${fmt(c.perRA)})</div>
               ${ras.map((n,i)=>`<div class="row"><div>${n||`Ride Along ${i+1}`}</div><div class="right"><b>${fmt(c.perRA)}</b></div></div>`).join('')}
             </div>` : ''}
-
           <div class="grid2">
             <div class="box"><div class="muted">COMBINED PAYOUT</div><div style="font-weight:700;font-size:16px">${fmt(c.combined)}</div></div>
             <div class="box"><div class="muted">TOTAL AFTER FEES</div><div style="font-weight:700;font-size:16px">${fmt(c.afterFees)}</div></div>
@@ -190,7 +162,6 @@
     function buildReportHTML(rows){
       const add = (map,name,amt)=>{ const k=(name||'').trim()||'(Unnamed)'; map.set(k,(map.get(k)||0)+(amt||0)); };
       const rollup = { vets:new Map(), reps:new Map(), ras:new Map() };
-
       const table = rows.map((r,i)=>{
         const c=calcOne(r);
         const vets=fit(r.vetNames,r.numVets);
@@ -201,9 +172,7 @@
         ras .forEach(n=>add(rollup.ras ,n,c.perRA));
         return {i,r,c};
       });
-
       const h1 = `<h2 style="text-align:center;font-size:18px;margin-bottom:8px">ALTA CAL — PAYOUT REPORT</h2>`;
-
       const tableHTML = `
         <table>
           <thead>
@@ -227,13 +196,13 @@
                 <td class="right">${num(r.numReps)||''}</td>
                 <td class="right">${num(r.numReps)?fmt(c.perRep):''}</td>
                 <td class="right">${num(r.numReps)?fmt(c.totalReps):''}</td>
+                <td class="right">${num(r.numRideAlongs)||''}</td>
                 <td class="right">${num(r.numRideAlongs)?fmt(c.perRA):''}</td>
                 <td class="right"><b>${fmt(c.combined)}</b></td>
                 <td class="right"><b>${fmt(c.afterFees)}</b></td>
               </tr>`).join('')}
           </tbody>
         </table>`;
-
       const block = (title,map) => {
         const list=[...map.entries()].sort((a,b)=>b[1]-a[1]);
         return `
@@ -242,7 +211,6 @@
             ${list.length?list.map(([n,a])=>`<div class="row"><div>${n}</div><div class="right"><b>${fmt(a)}</b></div></div>`).join(''):'<div class="muted">None</div>'}
           </div>`;
       };
-
       return `
         <div class="page">
           ${h1}
@@ -258,13 +226,13 @@
         </div>`;
     }
 
-    /* ---------- Components ---------- */
     const Labeled = ({label,value,onChange}) => (
       <div>
         <label className="text-xs font-bold block mb-1">{label}</label>
         <input className="w-full border-2 rounded px-2 py-2" value={value||''} onChange={e=>onChange(e.target.value)}/>
       </div>
     );
+    
     const Money = ({label,value,onChange,onBlur}) => (
       <div>
         <label className="text-xs font-bold block mb-1">{label}</label>
@@ -274,6 +242,7 @@
         </div>
       </div>
     );
+    
     const Stat = ({title,value}) => (
       <div className="border-2 rounded p-3 text-center">
         <div className="text-xs font-bold mb-1">{title}</div>
@@ -316,15 +285,28 @@
         vetNames:[], repNames:[], rideAlongNames:[]
       });
 
-      const [rows,setRows] = React.useState([ blank() ]);
+      const [rows,setRows] = useState([ blank() ]);
 
       const upd = (idx,key,val)=>{
         setRows(r=>{
           const a=[...r], row={...a[idx]};
           if (key==='contractAmount'){
             row.contractAmount = onlyNum(val);
+            const contractVal = num(row.contractAmount);
+            // Auto-calculate house fee based on tiers
+            let housePct = 0;
+            if (contractVal > 0) {
+              if (contractVal <= 20000) {
+                housePct = 10;
+              } else if (contractVal <= 30000) {
+                housePct = 9;
+              } else {
+                housePct = 8;
+              }
+            }
+            const houseFeeAmt = contractVal * (housePct / 100);
+            row.houseFeeAmount = houseFeeAmt.toFixed(2);
             if (num(row.netAmount) > num(row.contractAmount)) row.netAmount = row.contractAmount;
-            if (num(row.houseFeeAmount) > num(row.contractAmount)) row.houseFeeAmount = row.contractAmount;
           } else if (key==='netAmount'){
             row.netAmount = onlyNum(val);
             if (num(row.netAmount) > num(row.contractAmount)) row.netAmount = row.contractAmount;
@@ -353,7 +335,7 @@
         });
       };
 
-      const printOne   = (idx)=> openPrintWindow(buildSingleHTML(rows[idx], idx), `Calculator #${idx+1}`);
+      const printOne = (idx)=> openPrintWindow(buildSingleHTML(rows[idx], idx), `Calculator #${idx+1}`);
       const printReport= ()=> openPrintWindow(buildReportHTML(rows), 'Payout Report');
 
       return (
@@ -404,7 +386,7 @@
                     <div className="text-sm">Amt = Contract − Net</div>
                     <div className="text-center text-lg font-bold mt-1">
                       {fmt(Math.max(num(row.contractAmount)-num(row.netAmount),0))}
-                      <span className="ml-2 text-sm">({((num(row.contractAmount)>0)?((Math.max(num(row.contractAmount)-num(row.netAmount),0)/num(row.contractAmount))*100:0).toFixed(2)}%)</span>
+                      <span className="ml-2 text-sm">({((num(row.contractAmount)>0)?((Math.max(num(row.contractAmount)-num(row.netAmount),0)/num(row.contractAmount))*100):0).toFixed(2)}%)</span>
                     </div>
                   </div>
                 </div>
