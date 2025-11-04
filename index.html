@@ -42,11 +42,10 @@
       const net = Math.min(num(d.netAmount)||0, contract||0);
       const houseAmt = Math.min(num(d.houseFeeAmount)||0, contract||0);
       const labor = num(d.laborMaterial);
-      const ride = num(d.rideAlong);
       const dealerFeeAmt = Math.max(contract - net, 0);
       const dealerPct = contract>0 ? (dealerFeeAmt/contract)*100 : 0;
       const afterHouse = contract - houseAmt;
-      const afterFees = afterHouse - labor - dealerFeeAmt - ride;
+      const afterFees = afterHouse - labor - dealerFeeAmt;
       const marginPct = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
       let vetRate=25, repRate=20;
       if (marginPct>=50){ vetRate=55; repRate=40; }
@@ -59,17 +58,28 @@
       const repPool = base*(repRate/100);
       const perVet = people>0 ? vetPool/people : 0;
       const perRep = people>0 ? repPool/people : 0;
+      
+      // Ride along fee - deducted from each vet/rep
+      const rideAlongFee = num(d.rideAlongFee);
+      const feePerPerson = people>0 ? rideAlongFee/people : 0;
+      const perVetAfterFee = perVet - feePerPerson;
+      const perRepAfterFee = perRep - feePerPerson;
+      
       const raCount = num(d.numRideAlongs);
-      const perRA = raCount>0 ? (ride/raCount) : 0;
-      const totalVets = perVet*vets;
-      const totalReps = perRep*reps;
+      
+      // Ride along bonus - separate calculation
+      const rideAlongBonus = num(d.rideAlongBonus);
+      const bonusPerRA = raCount>0 ? rideAlongBonus/raCount : 0;
+      
+      const totalVets = perVetAfterFee*vets;
+      const totalReps = perRepAfterFee*reps;
       return {
-        contract, net, houseAmt, labor, ride,
+        contract, net, houseAmt, labor,
         dealerFeeAmt, dealerPct,
         afterHouse, afterFees, marginPct,
         vetRate, repRate,
-        perVet, perRep, totalVets, totalReps,
-        perRA, combined: totalVets + totalReps
+        perVet: perVetAfterFee, perRep: perRepAfterFee, totalVets, totalReps,
+        bonusPerRA, combined: totalVets + totalReps
       };
     }
 
@@ -136,7 +146,6 @@
               <div><b>Net Amount:</b> ${fmt(c.net)}</div>
               <div><b>Dealer Fee:</b> ${fmt(c.dealerFeeAmt)} (${(c.dealerPct||0).toFixed(2)}%)</div>
               <div><b>Labor & Material:</b> ${fmt(c.labor)}</div>
-              <div><b>Ride Along (Total):</b> ${fmt(c.ride)}</div>
               <div class="right"><b>Total After Fees:</b> ${fmt(c.afterFees)}</div>
             </div>
           </div>
@@ -149,8 +158,8 @@
           ${listHTML('REPS', reps, c.perRep)}
           ${ras.length ? `
             <div class="box">
-              <div class="muted" style="font-weight:700;margin-bottom:6px">RIDE ALONGS (Per: ${fmt(c.perRA)})</div>
-              ${ras.map((n,i)=>`<div class="row"><div>${n||`Ride Along ${i+1}`}</div><div class="right"><b>${fmt(c.perRA)}</b></div></div>`).join('')}
+              <div class="muted" style="font-weight:700;margin-bottom:6px">RIDE ALONGS (Bonus Per: ${fmt(c.bonusPerRA)})</div>
+              ${ras.map((n,i)=>`<div class="row"><div>${n||`Ride Along ${i+1}`}</div><div class="right"><b>${fmt(c.bonusPerRA)}</b></div></div>`).join('')}
             </div>` : ''}
           <div class="grid2">
             <div class="box"><div class="muted">COMBINED PAYOUT</div><div style="font-weight:700;font-size:16px">${fmt(c.combined)}</div></div>
@@ -169,7 +178,7 @@
         const ras =fit(r.rideAlongNames,r.numRideAlongs);
         vets.forEach(n=>add(rollup.vets,n,c.perVet));
         reps.forEach(n=>add(rollup.reps,n,c.perRep));
-        ras .forEach(n=>add(rollup.ras ,n,c.perRA));
+        ras .forEach(n=>add(rollup.ras ,n,c.bonusPerRA));
         return {i,r,c};
       });
       const h1 = `<h2 style="text-align:center;font-size:18px;margin-bottom:8px">ALTA CAL — PAYOUT REPORT</h2>`;
@@ -197,7 +206,7 @@
                 <td class="right">${num(r.numReps)?fmt(c.perRep):''}</td>
                 <td class="right">${num(r.numReps)?fmt(c.totalReps):''}</td>
                 <td class="right">${num(r.numRideAlongs)||''}</td>
-                <td class="right">${num(r.numRideAlongs)?fmt(c.perRA):''}</td>
+                <td class="right">${num(r.numRideAlongs)?fmt(c.bonusPerRA):''}</td>
                 <td class="right"><b>${fmt(c.combined)}</b></td>
                 <td class="right"><b>${fmt(c.afterFees)}</b></td>
               </tr>`).join('')}
@@ -280,7 +289,8 @@
         customerName:'', jobNumber:'',
         contractAmount:'', netAmount:'',
         houseFeeAmount:'', laborMaterial:'',
-        rideAlong:'',
+        rideAlongFee:'',
+        rideAlongBonus:'',
         numVets:'', numReps:'', numRideAlongs:'',
         vetNames:[], repNames:[], rideAlongNames:[]
       });
@@ -319,6 +329,8 @@
             row.numReps = onlyInt(val); row.repNames = fit(row.repNames,row.numReps);
           } else if (key==='numRideAlongs'){
             row.numRideAlongs = onlyInt(val); row.rideAlongNames = fit(row.rideAlongNames,row.numRideAlongs);
+          } else if (key==='rideAlongFee' || key==='rideAlongBonus'){
+            row[key]=onlyNum(val);
           } else {
             row[key]=onlyNum(val);
           }
@@ -378,9 +390,8 @@
                          onChange={v=>upd(idx,'houseFeeAmount',v)}/>
                 </div>
 
-                <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Money label="LABOR & MATERIAL" value={row.laborMaterial} onChange={v=>upd(idx,'laborMaterial',v)}/>
-                  <Money label="RIDE ALONG (TOTAL)" value={row.rideAlong} onChange={v=>upd(idx,'rideAlong',v)}/>
                   <div className="border-2 rounded p-3">
                     <div className="text-xs font-bold mb-1">DEALER FEE (DERIVED)</div>
                     <div className="text-sm">Amt = Contract − Net</div>
@@ -389,6 +400,11 @@
                       <span className="ml-2 text-sm">({((num(row.contractAmount)>0)?((Math.max(num(row.contractAmount)-num(row.netAmount),0)/num(row.contractAmount))*100):0).toFixed(2)}%)</span>
                     </div>
                   </div>
+                </div>
+
+                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Money label="RIDE ALONG FEE (deducted from each vet/rep)" value={row.rideAlongFee} onChange={v=>upd(idx,'rideAlongFee',v)}/>
+                  <Money label="RIDE ALONG BONUS (separate bonus pool)" value={row.rideAlongBonus} onChange={v=>upd(idx,'rideAlongBonus',v)}/>
                 </div>
 
                 <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -405,7 +421,7 @@
                          names={fit(row.repNames,row.numReps)} per={c.perRep}
                          setName={(i,val)=>setName(idx,'rep',i,val)} color="purple"/>
                   <Group label="RIDE ALONGS" count={row.numRideAlongs} setCount={v=>upd(idx,'numRideAlongs',v)}
-                         names={fit(row.rideAlongNames,row.numRideAlongs)} per={c.perRA}
+                         names={fit(row.rideAlongNames,row.numRideAlongs)} per={c.bonusPerRA}
                          setName={(i,val)=>setName(idx,'rideAlong',i,val)} color="red"/>
                 </div>
               </div>
