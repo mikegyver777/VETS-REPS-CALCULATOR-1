@@ -5,46 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>ALTA CAL PROFIT SHARE</title>
 
-  <!-- React 18 UMD (must be before Babel so JSX transform targets globals) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- iOS niceties -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
 
-  <!-- Babel for in-browser JSX transform -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Tailwind (pinned) -->
+  <script src="https://cdn.tailwindcss.com/3.4.13"></script>
 
-  <!-- (Optional) Tailwind via CDN. Safe to keep; won’t affect logic. -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React 18 UMD (pinned) -->
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel Standalone (pinned) for in-browser JSX -->
+  <script src="https://unpkg.com/@babel/standalone@7.25.7/babel.min.js"></script>
 
   <style>
     html { -webkit-text-size-adjust: 100%; }
-    input, button { font-size: 16px; }
+    input, button { font-size: 16px; } /* stop iOS zoom */
     * { -webkit-tap-highlight-color: transparent; }
     @media (max-width: 640px) {
       .header-wrap { flex-wrap: wrap; }
       .header-actions { width: 100%; display: flex; gap: 8px; margin-top: 8px; }
       .header-actions button { flex: 1 1 auto; }
     }
-    #errbox{display:none;position:fixed;left:0;right:0;top:0;background:#7f1d1d;color:#fff;padding:10px 14px;z-index:9999;font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif}
-    #root{min-height:100vh}
   </style>
 </head>
 <body class="bg-gray-100">
-  <div id="errbox"></div>
-  <div id="root">Booting…</div>
+  <noscript style="display:block;padding:12px;background:#7f1d1d;color:#fff;text-align:center">
+    JavaScript is required to run this calculator.
+  </noscript>
+  <div id="root"></div>
 
-  <!-- Fail-safe error banner so you never see a silent blank page -->
-  <script>
-    function showErr(msg){
-      var box=document.getElementById('errbox');
-      box.textContent='Runtime error: '+msg;
-      box.style.display='block';
-    }
-    window.addEventListener('error', e => showErr(e && e.message || 'Unknown error'));
-    window.addEventListener('unhandledrejection', e => showErr((e && e.reason && (e.reason.message||e.reason)) || 'Unhandled rejection'));
-  </script>
-
-  <!-- APP -->
   <script type="text/babel" data-presets="env,react">
+    /* ========= Helpers ========= */
     const fmt = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((+n)||0);
     const num = s => { const x=parseFloat(String(s??'').replace(/[,$]/g,'')); return Number.isFinite(x)?x:0; };
     const onlyNum = s => (s||'').replace(/[^0-9.]/g,'');
@@ -57,6 +49,14 @@
       return base;
     };
 
+    /* ========= Core Math =========
+       Dealer Fee = Contract - Net
+       Total After Fees = (Contract - HouseAmt) - Labor - DealerFee - RideAlong
+       Margin% = AfterFees / (Contract - HouseAmt)
+       Tiers (margin%):
+         Reps: >=50 -> 40%; 40–49.99 -> 30%; 33–39 -> 25%; <=33 -> 20%
+         Vets: >=50 -> 55%; 40–49.99 -> 45%; 33–39 -> 35%; <=33 -> 25%
+    */
     function calcOne(d){
       const contract = num(d.contractAmount);
       const net      = Math.min(num(d.netAmount)||0, contract||0);
@@ -64,32 +64,28 @@
       const labor    = num(d.laborMaterial);
       const ride     = num(d.rideAlong);
 
-      // Dealer fee by rule: Contract - Net
       const dealerFeeAmt = Math.max(contract - net, 0);
       const dealerPct    = contract>0 ? (dealerFeeAmt/contract)*100 : 0;
 
-      // Totals
       const afterHouse = contract - houseAmt;
       const afterFees  = afterHouse - labor - dealerFeeAmt - ride;
+      const marginPct  = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
 
-      // Margin% drives tiers
-      const marginPct = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
-
-      // Tier schedules
       let vetRate=25, repRate=20;
       if (marginPct>=50){ vetRate=55; repRate=40; }
       else if (marginPct>=40){ vetRate=45; repRate=30; }
       else if (marginPct>=33){ vetRate=35; repRate=25; }
 
-      const vets = num(d.numVets), reps = num(d.numReps);
+      const vets   = num(d.numVets);
+      const reps   = num(d.numReps);
       const people = vets + reps;
 
-      const base = Math.max(afterFees,0);
+      const base    = Math.max(afterFees,0);
       const vetPool = base*(vetRate/100);
       const repPool = base*(repRate/100);
 
-      const perVet = people>0 ? vetPool/people : 0;
-      const perRep = people>0 ? repPool/people : 0;
+      const perVet  = people>0 ? vetPool/people : 0;
+      const perRep  = people>0 ? repPool/people : 0;
 
       const raCount = num(d.numRideAlongs);
       const perRA   = raCount>0 ? (ride/raCount) : 0;
@@ -107,15 +103,28 @@
       };
     }
 
+    /* ========= Icons ========= */
     const Icon = ({children,size=18}) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         {children}
       </svg>
     );
-    const Printer = () => (<Icon><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></Icon>);
-    const Plus    = () => (<Icon><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>);
+    const Printer = () => (
+      <Icon>
+        <polyline points="6 9 6 2 18 2 18 9"></polyline>
+        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+        <rect x="6" y="14" width="12" height="8"></rect>
+      </Icon>
+    );
+    const Plus = () => (
+      <Icon>
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </Icon>
+    );
 
+    /* ========= Print helpers ========= */
     function openPrintWindow(html, title='Print'){
       const win = window.open('', '_blank');
       if(!win){ alert('Pop-up blocked. Allow pop-ups for printing.'); return; }
@@ -141,22 +150,16 @@
         </style>
       </head><body>${html}</body></html>`);
       win.document.close();
-      setTimeout(()=>{ win.focus(); win.print(); }, 50);
+      setTimeout(()=>{ try{ win.focus(); win.print(); }catch(e){} }, 60);
     }
 
     function buildSingleHTML(row, index){
       const c = calcOne(row);
-      const fitNames = (names, count) => {
-        const arr = Array.isArray(names) ? [...names] : [];
-        const n = Math.max(0, parseInt(count||0,10)||0);
-        while (arr.length < n) arr.push('');
-        return arr.slice(0,n);
-      };
-      const vets = fitNames(row.vetNames,row.numVets);
-      const reps = fitNames(row.repNames,row.numReps);
-      const ras  = fitNames(row.rideAlongNames,row.numRideAlongs);
+      const vets = fit(row.vetNames,row.numVets);
+      const reps = fit(row.repNames,row.numReps);
+      const ras  = fit(row.rideAlongNames,row.numRideAlongs);
 
-      const fmtList = (title, names, per) => names.length===0 ? '' : `
+      const listHTML = (title, names, per) => names.length===0 ? '' : `
         <div class="box">
           <div class="muted" style="font-weight:700;margin-bottom:6px">${title} (Per: ${fmt(per)})</div>
           ${names.map((n,i)=>`<div class="row"><div>${n||`${title.slice(0,-1)} ${i+1}`}</div><div class="right"><b>${fmt(per)}</b></div></div>`).join('')}
@@ -194,8 +197,8 @@
             <div class="chip"><div class="muted">MARGIN %</div><div style="font-weight:700">${(c.marginPct||0).toFixed(1)}%</div></div>
           </div>
 
-          ${fmtList('VETS', vets, c.perVet)}
-          ${fmtList('REPS', reps, c.perRep)}
+          ${listHTML('VETS', vets, c.perVet)}
+          ${listHTML('REPS', reps, c.perRep)}
           ${ras.length ? `
             <div class="box">
               <div class="muted" style="font-weight:700;margin-bottom:6px">RIDE ALONGS (Per: ${fmt(c.perRA)})</div>
@@ -215,15 +218,9 @@
 
       const table = rows.map((r,i)=>{
         const c=calcOne(r);
-        const fitN = (names, count) => {
-          const arr = Array.isArray(names) ? [...names] : [];
-          const n = Math.max(0, parseInt(count||0,10)||0);
-          while (arr.length < n) arr.push('');
-          return arr.slice(0,n);
-        };
-        const vets=fitN(r.vetNames,r.numVets);
-        const reps=fitN(r.repNames,r.numReps);
-        const ras =fitN(r.rideAlongNames,r.numRideAlongs);
+        const vets=fit(r.vetNames,r.numVets);
+        const reps=fit(r.repNames,r.numReps);
+        const ras =fit(r.rideAlongNames,r.numRideAlongs);
         vets.forEach(n=>add(rollup.vets,n,c.perVet));
         reps.forEach(n=>add(rollup.reps,n,c.perRep));
         ras .forEach(n=>add(rollup.ras ,n,c.perRA));
@@ -286,12 +283,14 @@
         </div>`;
     }
 
+    /* ========= UI Components ========= */
     const Labeled = ({label,value,onChange}) => (
       <div>
         <label className="text-xs font-bold block mb-1">{label}</label>
         <input className="w-full border-2 rounded px-2 py-2" value={value||''} onChange={e=>onChange(e.target.value)}/>
       </div>
     );
+
     const Money = ({label,value,onChange,onBlur}) => (
       <div>
         <label className="text-xs font-bold block mb-1">{label}</label>
@@ -301,6 +300,7 @@
         </div>
       </div>
     );
+
     const Stat = ({title,value}) => (
       <div className="border-2 rounded p-3 text-center">
         <div className="text-xs font-bold mb-1">{title}</div>
@@ -323,7 +323,7 @@
                 <div key={i} className={`flex items-center justify-between border rounded px-3 py-2 bg-white ${colorBox}`}>
                   <input className="flex-1 mr-2 outline-none" placeholder={`${label} ${i+1} Name`} value={n||''}
                          onChange={e=>setName(i,e.target.value)}/>
-                  <div className="font-extrabold">{fmt(per)}</div>
+                  <div className="font-extrabold">${fmt(per).slice(1)}</div>
                 </div>
               ))}
             </div>
@@ -332,6 +332,7 @@
       );
     }
 
+    /* ========= App ========= */
     function App(){
       const blank = () => ({
         id: Date.now()+Math.random(),
@@ -380,8 +381,8 @@
         });
       };
 
-      const printOne   = (idx)=> openPrintWindow(buildSingleHTML(rows[idx], idx), `Calculator #${idx+1}`);
-      const printReport= ()=> openPrintWindow(buildReportHTML(rows), 'Payout Report');
+      const printOne    = (idx)=> openPrintWindow(buildSingleHTML(rows[idx], idx), `Calculator #${idx+1}`);
+      const printReport = ()=> openPrintWindow(buildReportHTML(rows), 'Payout Report');
 
       return (
         <div className="max-w-6xl mx-auto p-4">
@@ -431,9 +432,7 @@
                     <div className="text-sm">Amt = Contract − Net</div>
                     <div className="text-center text-lg font-bold mt-1">
                       {fmt(Math.max(num(row.contractAmount)-num(row.netAmount),0))}
-                      <span className="ml-2 text-sm">
-                        ({((num(row.contractAmount)>0)?((Math.max(num(row.contractAmount)-num(row.netAmount),0)/num(row.contractAmount))*100:0).toFixed(2)}%)
-                      </span>
+                      <span className="ml-2 text-sm">({((num(row.contractAmount)>0)?((Math.max(num(row.contractAmount)-num(row.netAmount),0)/num(row.contractAmount))*100:0).toFixed(2)}%)</span>
                     </div>
                   </div>
                 </div>
