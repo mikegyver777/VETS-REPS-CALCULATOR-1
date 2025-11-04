@@ -5,55 +5,45 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>ALTA CAL PROFIT SHARE</title>
 
-  <!-- iOS niceties -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-
-  <!-- Tailwind (CDN) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- React 18 UMD (prod) BEFORE Babel so globals exist for JSX transform output -->
+  <!-- React 18 UMD (must be before Babel so JSX transform targets globals) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
-  <!-- Babel Standalone for JSX in the browser -->
+  <!-- Babel for in-browser JSX transform -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- (Optional) Tailwind via CDN. Safe to keep; won’t affect logic. -->
+  <script src="https://cdn.tailwindcss.com"></script>
 
   <style>
     html { -webkit-text-size-adjust: 100%; }
-    input, button { font-size: 16px; } /* stop iOS zoom */
+    input, button { font-size: 16px; }
     * { -webkit-tap-highlight-color: transparent; }
     @media (max-width: 640px) {
       .header-wrap { flex-wrap: wrap; }
       .header-actions { width: 100%; display: flex; gap: 8px; margin-top: 8px; }
       .header-actions button { flex: 1 1 auto; }
     }
-
-    /* Tiny runtime-error banner to avoid blank page */
-    #errbox { display:none; position:fixed; inset:0 0 auto 0; background:#7f1d1d; color:#fff; padding:10px 14px; font-family:system-ui, -apple-system, Segoe UI, Arial, sans-serif; z-index:9999; }
-    #errbox b { color:#fff; }
-    #root { min-height: 100vh; }
+    #errbox{display:none;position:fixed;left:0;right:0;top:0;background:#7f1d1d;color:#fff;padding:10px 14px;z-index:9999;font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif}
+    #root{min-height:100vh}
   </style>
 </head>
 <body class="bg-gray-100">
   <div id="errbox"></div>
-  <div id="root"></div>
+  <div id="root">Booting…</div>
 
+  <!-- Fail-safe error banner so you never see a silent blank page -->
   <script>
-    // Show errors instead of a blank page (helps on GitHub Pages)
-    window.addEventListener('error', function(e){
-      var box = document.getElementById('errbox');
-      box.innerHTML = '<b>Runtime error:</b> ' + (e && e.message ? e.message : 'Unknown error');
-      box.style.display = 'block';
-    });
-    window.addEventListener('unhandledrejection', function(e){
-      var box = document.getElementById('errbox');
-      var msg = e && e.reason && (e.reason.message || e.reason.toString()) || 'Unhandled promise rejection';
-      box.innerHTML = '<b>Runtime error:</b> ' + msg;
-      box.style.display = 'block';
-    });
+    function showErr(msg){
+      var box=document.getElementById('errbox');
+      box.textContent='Runtime error: '+msg;
+      box.style.display='block';
+    }
+    window.addEventListener('error', e => showErr(e && e.message || 'Unknown error'));
+    window.addEventListener('unhandledrejection', e => showErr((e && e.reason && (e.reason.message||e.reason)) || 'Unhandled rejection'));
   </script>
 
-  <!-- App -->
+  <!-- APP -->
   <script type="text/babel" data-presets="env,react">
     const fmt = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((+n)||0);
     const num = s => { const x=parseFloat(String(s??'').replace(/[,$]/g,'')); return Number.isFinite(x)?x:0; };
@@ -69,7 +59,7 @@
 
     function calcOne(d){
       const contract = num(d.contractAmount);
-      const net      = Math.min(num(d.netAmount)||0, contract||0);  // clamp to contract
+      const net      = Math.min(num(d.netAmount)||0, contract||0);
       const houseAmt = Math.min(num(d.houseFeeAmount)||0, contract||0);
       const labor    = num(d.laborMaterial);
       const ride     = num(d.rideAlong);
@@ -85,7 +75,7 @@
       // Margin% drives tiers
       const marginPct = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
 
-      // Tier schedules (unchanged)
+      // Tier schedules
       let vetRate=25, repRate=20;
       if (marginPct>=50){ vetRate=55; repRate=40; }
       else if (marginPct>=40){ vetRate=45; repRate=30; }
@@ -94,7 +84,6 @@
       const vets = num(d.numVets), reps = num(d.numReps);
       const people = vets + reps;
 
-      // Pools from AfterFees
       const base = Math.max(afterFees,0);
       const vetPool = base*(vetRate/100);
       const repPool = base*(repRate/100);
@@ -118,7 +107,6 @@
       };
     }
 
-    /* ---------- Icons ---------- */
     const Icon = ({children,size=18}) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -128,7 +116,6 @@
     const Printer = () => (<Icon><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></Icon>);
     const Plus    = () => (<Icon><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>);
 
-    /* ---------- Print helpers (new window) ---------- */
     function openPrintWindow(html, title='Print'){
       const win = window.open('', '_blank');
       if(!win){ alert('Pop-up blocked. Allow pop-ups for printing.'); return; }
@@ -157,14 +144,19 @@
       setTimeout(()=>{ win.focus(); win.print(); }, 50);
     }
 
-    /* ---------- Build print HTML ---------- */
     function buildSingleHTML(row, index){
       const c = calcOne(row);
-      const vets = fit(row.vetNames,row.numVets);
-      const reps = fit(row.repNames,row.numReps);
-      const ras  = fit(row.rideAlongNames,row.numRideAlongs);
+      const fitNames = (names, count) => {
+        const arr = Array.isArray(names) ? [...names] : [];
+        const n = Math.max(0, parseInt(count||0,10)||0);
+        while (arr.length < n) arr.push('');
+        return arr.slice(0,n);
+      };
+      const vets = fitNames(row.vetNames,row.numVets);
+      const reps = fitNames(row.repNames,row.numReps);
+      const ras  = fitNames(row.rideAlongNames,row.numRideAlongs);
 
-      const listHTML = (title, names, per) => names.length===0 ? '' : `
+      const fmtList = (title, names, per) => names.length===0 ? '' : `
         <div class="box">
           <div class="muted" style="font-weight:700;margin-bottom:6px">${title} (Per: ${fmt(per)})</div>
           ${names.map((n,i)=>`<div class="row"><div>${n||`${title.slice(0,-1)} ${i+1}`}</div><div class="right"><b>${fmt(per)}</b></div></div>`).join('')}
@@ -202,8 +194,8 @@
             <div class="chip"><div class="muted">MARGIN %</div><div style="font-weight:700">${(c.marginPct||0).toFixed(1)}%</div></div>
           </div>
 
-          ${listHTML('VETS', vets, c.perVet)}
-          ${listHTML('REPS', reps, c.perRep)}
+          ${fmtList('VETS', vets, c.perVet)}
+          ${fmtList('REPS', reps, c.perRep)}
           ${ras.length ? `
             <div class="box">
               <div class="muted" style="font-weight:700;margin-bottom:6px">RIDE ALONGS (Per: ${fmt(c.perRA)})</div>
@@ -223,9 +215,15 @@
 
       const table = rows.map((r,i)=>{
         const c=calcOne(r);
-        const vets=fit(r.vetNames,r.numVets);
-        const reps=fit(r.repNames,r.numReps);
-        const ras =fit(r.rideAlongNames,r.numRideAlongs);
+        const fitN = (names, count) => {
+          const arr = Array.isArray(names) ? [...names] : [];
+          const n = Math.max(0, parseInt(count||0,10)||0);
+          while (arr.length < n) arr.push('');
+          return arr.slice(0,n);
+        };
+        const vets=fitN(r.vetNames,r.numVets);
+        const reps=fitN(r.repNames,r.numReps);
+        const ras =fitN(r.rideAlongNames,r.numRideAlongs);
         vets.forEach(n=>add(rollup.vets,n,c.perVet));
         reps.forEach(n=>add(rollup.reps,n,c.perRep));
         ras .forEach(n=>add(rollup.ras ,n,c.perRA));
@@ -288,7 +286,6 @@
         </div>`;
     }
 
-    /* ---------- Components ---------- */
     const Labeled = ({label,value,onChange}) => (
       <div>
         <label className="text-xs font-bold block mb-1">{label}</label>
@@ -434,7 +431,9 @@
                     <div className="text-sm">Amt = Contract − Net</div>
                     <div className="text-center text-lg font-bold mt-1">
                       {fmt(Math.max(num(row.contractAmount)-num(row.netAmount),0))}
-                      <span className="ml-2 text-sm">({((num(row.contractAmount)>0)?((Math.max(num(row.contractAmount)-num(row.netAmount),0)/num(row.contractAmount))*100:0).toFixed(2)}%)</span>
+                      <span className="ml-2 text-sm">
+                        ({((num(row.contractAmount)>0)?((Math.max(num(row.contractAmount)-num(row.netAmount),0)/num(row.contractAmount))*100:0).toFixed(2)}%)
+                      </span>
                     </div>
                   </div>
                 </div>
