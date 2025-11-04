@@ -14,12 +14,31 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
+    /* Screen defaults for overlays */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.6);
+      display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem;
+    }
+    .paper {
+      background: #fff; border-radius: .5rem; padding: 1rem;
+      max-height: 90vh; overflow: auto;
+    }
+
+    /* PRINT RULES — legal full page, fill content */
     @media print {
-      @page { size: legal; margin: .25in; }
-      .no-print { display:none !important; }
+      @page { size: legal portrait; margin: 0.25in; }
+      html, body { height: 100%; background: #fff !important; }
+      .no-print { display: none !important; }
+
+      /* Make overlays behave like full-page documents on print */
+      .overlay { position: static !important; background: transparent !important; padding: 0 !important; }
+      .paper { max-height: unset !important; overflow: visible !important; width: 100% !important; padding: 0 !important; border: none !important; border-radius: 0 !important; }
+
+      /* Tighter print typography */
       .print-block { font-size: 10px; }
       .print-table th, .print-table td { padding: 3px 4px !important; font-size: 9px !important; }
       .print-table th { background:#e5e7eb !important; }
+      .print-heading { margin-bottom: 8px !important; }
     }
   </style>
 </head>
@@ -27,18 +46,13 @@
   <div id="root"></div>
 
   <script type="text/babel" data-presets="env,react">
-    /* ================= Helpers (global) ================= */
+    /* ================= Helpers ================= */
     const fmt = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((+n)||0);
-    const num = s => {
-      if (s===null||s===undefined||s==='') return 0;
-      const x = parseFloat(String(s).replace(/[,$]/g,''));
-      return Number.isFinite(x) ? x : 0;
-    };
+    const num = s => { const x=parseFloat(String(s??'').replace(/[,$]/g,'')); return Number.isFinite(x)?x:0; };
     const pctFee = (amount, feePct) => (num(amount) * (num(feePct)/100));
     const onlyNum = s => (s||'').replace(/[^0-9.]/g,'');
     const onlyInt = s => (s||'').replace(/[^0-9]/g,'');
 
-    // Make array length == count (fill with "")
     const fit = (arr, count) => {
       const c = Math.max(0, parseInt(count||0,10)||0);
       const base = Array.isArray(arr) ? [...arr] : [];
@@ -47,7 +61,6 @@
       return base;
     };
 
-    // Core calculation used by UI + print
     function calcOne(d){
       const contract     = num(d.contractAmount);
       const housePct     = num(d.houseFeePercent);
@@ -57,10 +70,9 @@
       const ccFeeAmt     = pctFee(d.creditCard, d.creditCardFee);
 
       const afterHouse   = contract - houseFee;
-      const afterFees    = afterHouse - num(d.laborMaterial) - dealerFeeAmt;   // your “totalAfterFees”
+      const afterFees    = afterHouse - num(d.laborMaterial) - dealerFeeAmt;
       const marginPct    = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
 
-      // tier schedule
       let vetRate=25, repRate=20;
       if (marginPct >= 50) { vetRate=55; repRate=40; }
       else if (marginPct >= 40) { vetRate=45; repRate=30; }
@@ -77,7 +89,7 @@
       const rideAlongFee     = num(d.rideAlong);
       const rideAlongBonus   = num(d.rideAlongBonus);
       const rideAlongTotal   = rideAlongFee + rideAlongBonus;
-      const rideAlongPer     = (people>0) ? rideAlongFee/people : 0; // fee split across vets+reps
+      const rideAlongPer     = (people>0) ? rideAlongFee/people : 0;
       const ccPer            = (people>0) ? ccFeeAmt/people : 0;
 
       const netPerVet = perVet - rideAlongPer - ccPer;
@@ -103,7 +115,7 @@
       };
     }
 
-    /* ================= Simple Icons ================= */
+    /* ================= Icons ================= */
     const Icon = ({children,size=20}) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -143,9 +155,9 @@
         setRows(r => {
           const a = [...r];
           const row = {...a[idx]};
-          if (key==='numVets')       { row.numVets = onlyInt(val);       row.vetNames       = fit(row.vetNames, row.numVets); }
-          else if (key==='numReps')  { row.numReps = onlyInt(val);       row.repNames       = fit(row.repNames, row.numReps); }
-          else if (key==='numRideAlongs') { row.numRideAlongs = onlyInt(val); row.rideAlongNames = fit(row.rideAlongNames, row.numRideAlongs); }
+          if (key==='numVets')            { row.numVets = onlyInt(val);            row.vetNames       = fit(row.vetNames, row.numVets); }
+          else if (key==='numReps')       { row.numReps = onlyInt(val);            row.repNames       = fit(row.repNames, row.numReps); }
+          else if (key==='numRideAlongs') { row.numRideAlongs = onlyInt(val);      row.rideAlongNames = fit(row.rideAlongNames, row.numRideAlongs); }
           else row[key]=val;
           a[idx]=row; return a;
         });
@@ -196,7 +208,7 @@
                 {/* top row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 border-b-2 border-black">
                   <Labeled label="CUSTOMER NAME" value={row.customerName} onChange={v=>upd(idx,'customerName',v)}/>
-                  <Labeled label="JOB NUMBER" value={row.jobNumber} onChange={v=>upd(idx,'jobNumber',v)}/>
+                  <Labeled label="JOB NUMBER"    value={row.jobNumber}    onChange={v=>upd(idx,'jobNumber',v)}/>
                 </div>
 
                 {/* money inputs */}
@@ -237,46 +249,34 @@
                   <Stat title="REPS %" value={`${c.repRate}%`}/>
                 </div>
 
-                {/* === COUNTS + NAMES WITH AMOUNTS === */}
-                <div className="p-4 space-y-6 border-top-2">
-                  {/* VETS */}
+                {/* Counts + Names with amounts */}
+                <div className="p-4 space-y-6">
                   <div className="space-y-3">
                     <Count label="VETS ON CONTRACT" value={row.numVets} onChange={v=>upd(idx,'numVets',v)}/>
                     {num(row.numVets)>0 && (
                       <ListWithAmounts
-                        label="VET"
-                        names={fit(row.vetNames,row.numVets)}
-                        perAmount={c.perVet}
-                        color="green"
-                        onNameChange={(i,val)=>updName(idx,'vet',i,val)}
+                        label="VET" names={fit(row.vetNames,row.numVets)} perAmount={c.perVet}
+                        color="green" onNameChange={(i,val)=>updName(idx,'vet',i,val)}
                       />
                     )}
                   </div>
 
-                  {/* REPS */}
                   <div className="space-y-3">
                     <Count label="REPS ON CONTRACT" value={row.numReps} onChange={v=>upd(idx,'numReps',v)}/>
                     {num(row.numReps)>0 && (
                       <ListWithAmounts
-                        label="REP"
-                        names={fit(row.repNames,row.numReps)}
-                        perAmount={c.perRep}
-                        color="purple"
-                        onNameChange={(i,val)=>updName(idx,'rep',i,val)}
+                        label="REP" names={fit(row.repNames,row.numReps)} perAmount={c.perRep}
+                        color="purple" onNameChange={(i,val)=>updName(idx,'rep',i,val)}
                       />
                     )}
                   </div>
 
-                  {/* RIDE ALONGS */}
                   <div className="space-y-3">
                     <Count label="RIDE ALONGS" value={row.numRideAlongs} onChange={v=>upd(idx,'numRideAlongs',v)}/>
                     {num(row.numRideAlongs)>0 && (
                       <ListWithAmounts
-                        label="RIDE ALONG"
-                        names={fit(row.rideAlongNames,row.numRideAlongs)}
-                        perAmount={c.perRA}
-                        color="red"
-                        onNameChange={(i,val)=>updName(idx,'rideAlong',i,val)}
+                        label="RIDE ALONG" names={fit(row.rideAlongNames,row.numRideAlongs)} perAmount={c.perRA}
+                        color="red" onNameChange={(i,val)=>updName(idx,'rideAlong',i,val)}
                       />
                     )}
                   </div>
@@ -286,14 +286,10 @@
           })}
 
           {/* PRINT ALL */}
-          {showPrintAll && (
-            <PrintAll rows={rows} onClose={()=>setShowPrintAll(false)}/>
-          )}
+          {showPrintAll && <PrintAll rows={rows} onClose={()=>setShowPrintAll(false)}/>}
 
-          {/* PRINT SINGLE */}
-          {printIndex!==null && (
-            <PrintOne row={rows[printIndex]} index={printIndex} onClose={()=>setPrintIndex(null)}/>
-          )}
+          {/* PRINT SINGLE (full legal page on print) */}
+          {printIndex!==null && <PrintOne row={rows[printIndex]} index={printIndex} onClose={()=>setPrintIndex(null)}/>}
         </div>
       );
     }
@@ -325,7 +321,7 @@
     const Count = ({label,value,onChange}) => (
       <div>
         <label className="text-xs font-bold block mb-1">{label}</label>
-        <input className="w-32 text-center text-lg border-2 rounded px-2 py-2" value={value||''} onChange={e=>onChange(onlyInt(e.target.value))} inputMode="numeric"/>
+        <input className="w-32 text-center text-lg border-2 rounded px-2 py-2" value={value||''} onChange={e=>onChange((e.target.value||'').replace(/[^0-9]/g,''))} inputMode="numeric"/>
       </div>
     );
     const Stat = ({title,value}) => (
@@ -335,7 +331,6 @@
       </div>
     );
 
-    // List of name fields with amount on the right (e.g., "John Doe   $12,000")
     function ListWithAmounts({label, names, perAmount, color='gray', onNameChange}){
       const colorMap = {
         green:  'border-green-600 text-green-700',
@@ -361,10 +356,10 @@
       );
     }
 
-    /* ============== Print Views (Expanded) ============== */
+    /* ============== PRINT: REPORT ============== */
     function PrintAll({rows, onClose}){
-      // Build table rows with separate columns and names
-      const data = rows.map((row, idx) => {
+      // Row-wise data and role-specific name lists
+      const rowData = rows.map((row, idx) => {
         const c = calcOne(row);
         const vets = fit(row.vetNames, row.numVets);
         const reps = fit(row.repNames, row.numReps);
@@ -373,29 +368,30 @@
           idx: idx+1,
           customer: row.customerName || 'N/A',
           job: row.jobNumber || 'N/A',
-          vetsCount: num(row.numVets),
-          perVet: c.perVet,
-          totalVet: c.totalVets,
-          vetNames: vets.filter(Boolean).join(', '),
-          repsCount: num(row.numReps),
-          perRep: c.perRep,
-          totalRep: c.totalReps,
-          repNames: reps.filter(Boolean).join(', '),
-          rasCount: num(row.numRideAlongs),
-          perRA: c.perRA,
-          totalRA: c.rideAlongTotal,
-          raNames: ras.filter(Boolean).join(', '),
-          combined: c.combined,
-          profit: c.profit
+          vetsCount: num(row.numVets), perVet: c.perVet, totalVet: c.totalVets, vetNames: vets,
+          repsCount: num(row.numReps), perRep: c.perRep, totalRep: c.totalReps, repNames: reps,
+          rasCount: num(row.numRideAlongs), perRA: c.perRA, totalRA: c.rideAlongTotal, raNames: ras,
+          combined: c.combined, profit: c.profit
         };
       });
 
-      const hasVets = data.some(r => r.vetsCount>0);
-      const hasReps = data.some(r => r.repsCount>0);
-      const hasRAs  = data.some(r => r.rasCount>0);
+      const hasVets = rowData.some(r => r.vetsCount>0);
+      const hasReps = rowData.some(r => r.repsCount>0);
+      const hasRAs  = rowData.some(r => r.rasCount>0);
 
-      // Totals
-      const totals = data.reduce((a,r)=>({
+      // GRAND TOTALS BY PERSON (across all files)
+      const vetTotals = new Map();   // name -> total $
+      const repTotals = new Map();
+      const raTotals  = new Map();
+
+      rowData.forEach(r => {
+        r.vetNames.forEach(n => { if ((n||'').trim()) vetTotals.set(n.trim(), (vetTotals.get(n.trim())||0) + r.perVet); });
+        r.repNames.forEach(n => { if ((n||'').trim()) repTotals.set(n.trim(), (repTotals.get(n.trim())||0) + r.perRep); });
+        r.raNames.forEach(n  => { if ((n||'').trim()) raTotals.set(n.trim(),  (raTotals.get(n.trim())||0)  + r.perRA);  });
+      });
+
+      // Totals row
+      const totals = rowData.reduce((a,r)=>({
         totalVet: a.totalVet + r.totalVet,
         totalRep: a.totalRep + r.totalRep,
         totalRA:  a.totalRA  + r.totalRA,
@@ -404,11 +400,12 @@
       }), {totalVet:0,totalRep:0,totalRA:0,combined:0,profit:0});
 
       return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 w-full max-w-6xl max-h-[90vh] overflow-auto print-block">
-            <h2 className="text-xl font-bold text-center mb-3">ALTA CAL PROFIT SHARE — PAYOUT REPORT</h2>
+        <div className="overlay">
+          <div className="paper print-block w-full max-w-6xl">
+            <h2 className="text-xl font-bold text-center mb-3 print-heading">ALTA CAL PROFIT SHARE — PAYOUT REPORT</h2>
 
-            <table className="w-full border-2 border-black print-table">
+            {/* Per-file table with separate columns */}
+            <table className="w-full border-2 border-black print-table mb-4">
               <thead>
                 <tr>
                   <th className="border border-black text-left">#</th>
@@ -441,7 +438,7 @@
                 </tr>
               </thead>
               <tbody>
-                {data.map(r=>(
+                {rowData.map(r=>(
                   <tr key={r.idx} className="odd:bg-white even:bg-gray-50">
                     <td className="border border-black">{r.idx}</td>
                     <td className="border border-black">{r.customer}</td>
@@ -451,21 +448,21 @@
                       <td className="border border-black text-right">{r.vetsCount||''}</td>
                       <td className="border border-black text-right">{r.vetsCount?fmt(r.perVet):''}</td>
                       <td className="border border-black text-right">{r.vetsCount?fmt(r.totalVet):''}</td>
-                      <td className="border border-black text-left">{r.vetNames}</td>
+                      <td className="border border-black text-left">{r.vetNames.filter(Boolean).join(', ')}</td>
                     </>}
 
                     {hasReps && <>
                       <td className="border border-black text-right">{r.repsCount||''}</td>
                       <td className="border border-black text-right">{r.repsCount?fmt(r.perRep):''}</td>
                       <td className="border border-black text-right">{r.repsCount?fmt(r.totalRep):''}</td>
-                      <td className="border border-black text-left">{r.repNames}</td>
+                      <td className="border border-black text-left">{r.repNames.filter(Boolean).join(', ')}</td>
                     </>}
 
                     {hasRAs && <>
                       <td className="border border-black text-right">{r.rasCount||''}</td>
                       <td className="border border-black text-right">{r.rasCount?fmt(r.perRA):''}</td>
                       <td className="border border-black text-right">{r.rasCount?fmt(r.totalRA):''}</td>
-                      <td className="border border-black text-left">{r.raNames}</td>
+                      <td className="border border-black text-left">{r.raNames.filter(Boolean).join(', ')}</td>
                     </>}
 
                     <td className="border border-black text-right bg-green-50 font-semibold">{fmt(r.combined)}</td>
@@ -474,7 +471,6 @@
                 ))}
 
                 <tr className="bg-gray-100 font-bold">
-                  {/* span customer columns */}
                   <td className="border border-black text-right" colSpan={3}>TOTALS</td>
 
                   {hasVets && <>
@@ -504,6 +500,33 @@
               </tbody>
             </table>
 
+            {/* Grand totals by person */}
+            <h3 className="text-lg font-bold mb-2 print-heading">Grand Totals by Person (All Files)</h3>
+            <table className="w-full border-2 border-black print-table">
+              <thead>
+                <tr>
+                  <th className="border border-black text-left">Role</th>
+                  <th className="border border-black text-left">Name</th>
+                  <th className="border border-black text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...vetTotals.entries()].map(([name,amt])=>(
+                  <tr key={'vet-'+name}><td className="border border-black">Vet</td><td className="border border-black">{name}</td><td className="border border-black text-right">{fmt(amt)}</td></tr>
+                ))}
+                {[...repTotals.entries()].map(([name,amt])=>(
+                  <tr key={'rep-'+name}><td className="border border-black">Rep</td><td className="border border-black">{name}</td><td className="border border-black text-right">{fmt(amt)}</td></tr>
+                ))}
+                {[...raTotals.entries()].map(([name,amt])=>(
+                  <tr key={'ra-'+name}><td className="border border-black">Ride Along</td><td className="border border-black">{name}</td><td className="border border-black text-right">{fmt(amt)}</td></tr>
+                ))}
+                {/* If no names entered, show a hint row */}
+                {vetTotals.size===0 && repTotals.size===0 && raTotals.size===0 && (
+                  <tr><td className="border border-black text-center" colSpan="3">Enter names in each file to aggregate per-person totals.</td></tr>
+                )}
+              </tbody>
+            </table>
+
             <div className="no-print flex justify-center gap-2 mt-3">
               <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={()=>window.print()}>PRINT</button>
               <button className="bg-gray-600 text-white px-4 py-2 rounded" onClick={onClose}>CLOSE</button>
@@ -513,6 +536,7 @@
       );
     }
 
+    /* ============== PRINT: INDIVIDUAL (full legal page) ============== */
     function PrintOne({row, index, onClose}){
       const c   = calcOne(row);
       const vets= fit(row.vetNames, row.numVets);
@@ -520,9 +544,9 @@
       const ras = fit(row.rideAlongNames, row.numRideAlongs);
 
       return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-4 w-full max-w-3xl max-h-[90vh] overflow-auto print-block">
-            <h2 className="text-xl font-bold text-center mb-3">ALTA CAL — CALCULATOR #{index+1}</h2>
+        <div className="overlay">
+          <div className="paper print-block w-full max-w-[8.5in]"> {/* width hints for screen; print uses @page */}
+            <h2 className="text-xl font-bold text-center mb-3 print-heading">ALTA CAL — CALCULATOR #{index+1}</h2>
 
             {/* Overview */}
             <div className="mb-2 grid grid-cols-2 gap-2 bg-gray-50 p-2 rounded border">
@@ -536,13 +560,10 @@
               <div className="grid grid-cols-2 gap-2">
                 <div><strong>Contract:</strong> {fmt(c.contract)}</div>
                 <div><strong>House Fee %:</strong> {c.housePct || 0}% &nbsp; (<strong>Amt:</strong> {fmt(c.houseFee)})</div>
-
                 <div><strong>Finance Amount:</strong> {fmt(c.finance)}</div>
                 <div><strong>Dealer Fee %:</strong> {c.dealerPct || 0}% &nbsp; (<strong>Amt:</strong> {fmt(c.dealerFeeAmt)})</div>
-
                 <div><strong>Credit Card:</strong> {fmt(num(row.creditCard))}</div>
                 <div><strong>CC Fee %:</strong> {c.ccPct || 0}% &nbsp; (<strong>Amt:</strong> {fmt(c.ccFeeAmt)})</div>
-
                 <div><strong>Labor & Material:</strong> {fmt(c.labor)}</div>
                 <div className="font-semibold text-right"><strong>Total After Fees:</strong> {fmt(c.afterFees)}</div>
               </div>
@@ -564,7 +585,7 @@
               </div>
             </div>
 
-            {/* Names + per person amounts */}
+            {/* Names + per person */}
             {num(row.numVets)>0 && (
               <div className="mb-2">
                 <div className="font-bold mb-1">Vets (Per: {fmt(c.perVet)})</div>
