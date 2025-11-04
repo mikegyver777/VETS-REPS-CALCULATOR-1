@@ -18,20 +18,28 @@
       display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
     .paper { background: #fff; border-radius: .5rem; padding: 1rem; max-height: 90vh; overflow: auto; }
 
-    /* PRINT: fit one Letter page, compact readable fonts, no “profit” anywhere */
+    /* PRINT: show ONLY the individual sheet, big readable text, one page */
     @media print {
       @page { size: letter portrait; margin: 0.5in; }
-      html, body { height: 100%; background: #fff !important; }
-      .no-print { display: none !important; }
-      .overlay { position: static !important; background: transparent !important; padding: 0 !important; }
-      .paper { width: 7.5in !important; max-height: unset !important; overflow: visible !important;
+      /* Hide everything globally... */
+      body * { visibility: hidden !important; }
+      /* ...except the selected print area */
+      .print-area, .print-area * { visibility: visible !important; }
+      .print-area { position: static !important; background: #fff !important; }
+
+      /* Fit to page width with comfortable margins */
+      .paper { width: 7.75in !important; max-height: unset !important; overflow: visible !important;
                padding: 0 !important; border: none !important; border-radius: 0 !important; }
 
-      .print-block { font-size: 12px; line-height: 1.35; }
-      .print-title { font-size: 18px !important; margin-bottom: 10px !important; }
-      .print-subtitle { font-size: 14px !important; }
-      .print-table th, .print-table td { font-size: 11px !important; padding: 4px 6px !important; }
-      .print-chip { font-size: 12px !important; padding: 6px 8px !important; }
+      /* Larger, accountant-friendly typography */
+      .print-block { font-size: 14px; line-height: 1.45; }
+      .print-title { font-size: 22px !important; margin-bottom: 12px !important; }
+      .print-subtitle { font-size: 16px !important; }
+      .print-table th, .print-table td { font-size: 13px !important; padding: 6px 8px !important; }
+      .print-chip { font-size: 14px !important; padding: 6px 8px !important; }
+
+      /* Ensure exactly one page for the individual sheet; avoid awkward breaks */
+      .print-section { page-break-inside: avoid; }
     }
   </style>
 </head>
@@ -61,7 +69,6 @@
     };
 
     function calcOne(d){
-      // Use effective house pct (auto if not manually set)
       const effectiveHousePct = d.houseFeeManual
         ? num(d.houseFeePercent)
         : (d.houseFeePercent ? num(d.houseFeePercent) : defaultHousePct(d.contractAmount));
@@ -128,7 +135,7 @@
     const Printer = ({size=20}) => (
       <Icon size={size}>
         <polyline points="6 9 6 2 18 2 18 9"></polyline>
-        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+        <path d="M6 18H4a 2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
         <rect x="6" y="14" width="12" height="8"></rect>
       </Icon>
     );
@@ -152,53 +159,48 @@
       });
 
       const [rows, setRows] = React.useState([ blank() ]);
-      const [showPrintAll, setShowPrintAll] = React.useState(false);
       const [printIndex, setPrintIndex] = React.useState(null);
 
-      /* Safety net: if House % is empty and not manual, auto-fill it */
+      /* Safety net: fill House % when empty & not manual */
       React.useEffect(()=>{
         setRows(prev=>{
-          let changed = false;
-          const next = prev.map(r=>{
-            if (!r.houseFeeManual) {
-              const want = String(defaultHousePct(r.contractAmount));
-              if (!r.houseFeePercent || r.houseFeePercent !== want) {
-                changed = true;
-                return { ...r, houseFeePercent: want };
+          let changed=false;
+          const next=prev.map(r=>{
+            if(!r.houseFeeManual){
+              const want=String(defaultHousePct(r.contractAmount));
+              if(!r.houseFeePercent || r.houseFeePercent!==want){
+                changed=true; return {...r, houseFeePercent: want};
               }
             }
             return r;
           });
-          return changed ? next : prev;
+          return changed?next:prev;
         });
-      }, [rows.length]); // run on mount and when rows added/removed
+      }, [rows.length]);
 
       const upd = (idx, key, val) => {
-        setRows(r => {
-          const a = [...r];
-          const row = {...a[idx]};
-
-          if (key === 'contractAmount') {
+        setRows(r=>{
+          const a=[...r]; const row={...a[idx]};
+          if (key==='contractAmount'){
             row.contractAmount = onlyNum(val);
-            if (!row.houseFeeManual) {
+            if(!row.houseFeeManual){
               row.houseFeePercent = String(defaultHousePct(row.contractAmount));
             }
-          } else if (key === 'houseFeePercent') {
+          } else if (key==='houseFeePercent'){
             row.houseFeePercent = onlyNum(val);
-            row.houseFeeManual = true; // user touched it—stop auto
-          } else if (key==='numVets') {
+            row.houseFeeManual = true;
+          } else if (key==='numVets'){
             row.numVets = onlyInt(val);
             row.vetNames = fit(row.vetNames, row.numVets);
-          } else if (key==='numReps') {
+          } else if (key==='numReps'){
             row.numReps = onlyInt(val);
             row.repNames = fit(row.repNames, row.numReps);
-          } else if (key==='numRideAlongs') {
+          } else if (key==='numRideAlongs'){
             row.numRideAlongs = onlyInt(val);
             row.rideAlongNames = fit(row.rideAlongNames, row.numRideAlongs);
           } else {
-            row[key] = val;
+            row[key]=val;
           }
-
           a[idx]=row; return a;
         });
       };
@@ -220,10 +222,6 @@
             <div className="flex items-center justify-between">
               <h1 className="text-2xl font-bold text-blue-800">ALTA CAL PROFIT SHARE</h1>
               <div className="flex gap-2">
-                <button className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2"
-                        onClick={()=>setShowPrintAll(true)}>
-                  <Printer/> Print Report
-                </button>
                 <button className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2"
                         onClick={()=>setRows(r=>[...r, blank()])}>
                   <Plus/> Add File
@@ -251,27 +249,20 @@
 
                 <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Money   label="CONTRACT AMOUNT" value={row.contractAmount}
-                           onChange={v=>upd(idx,'contractAmount',v)}
-                           onBlur={()=>upd(idx,'contractAmount',row.contractAmount)}/>
-                  <Money   label="CASH/CHECK"      value={row.cashCheck}
-                           onChange={v=>upd(idx,'cashCheck',onlyNum(v))}/>
-                  <Money   label="LABOR & MATERIAL" value={row.laborMaterial}
-                           onChange={v=>upd(idx,'laborMaterial',onlyNum(v))}/>
+                           onChange={v=>upd(idx,'contractAmount',v)} onBlur={()=>upd(idx,'contractAmount',row.contractAmount)}/>
+                  <Money   label="CASH/CHECK"      value={row.cashCheck} onChange={v=>upd(idx,'cashCheck',onlyNum(v))}/>
+                  <Money   label="LABOR & MATERIAL" value={row.laborMaterial} onChange={v=>upd(idx,'laborMaterial',onlyNum(v))}/>
                 </div>
 
                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="border-2 rounded p-3">
-                    <Money label="FINANCE AMOUNT" value={row.financeAmount}
-                           onChange={v=>upd(idx,'financeAmount',onlyNum(v))}/>
-                    <Pct   label="DEALER FEE (%)" value={row.dealerFee}
-                           onChange={v=>upd(idx,'dealerFee',onlyNum(v))}/>
+                    <Money label="FINANCE AMOUNT" value={row.financeAmount} onChange={v=>upd(idx,'financeAmount',onlyNum(v))}/>
+                    <Pct   label="DEALER FEE (%)" value={row.dealerFee}   onChange={v=>upd(idx,'dealerFee',onlyNum(v))}/>
                     <div className="text-sm text-center font-bold mt-1">{fmt(c.dealerFeeAmt)}</div>
                   </div>
                   <div className="border-2 rounded p-3">
-                    <Money label="CREDIT CARD" value={row.creditCard}
-                           onChange={v=>upd(idx,'creditCard',onlyNum(v))}/>
-                    <Pct   label="CC FEE (%)"  value={row.creditCardFee}
-                           onChange={v=>upd(idx,'creditCardFee',onlyNum(v))}/>
+                    <Money label="CREDIT CARD" value={row.creditCard} onChange={v=>upd(idx,'creditCard',onlyNum(v))}/>
+                    <Pct   label="CC FEE (%)"  value={row.creditCardFee} onChange={v=>upd(idx,'creditCardFee',onlyNum(v))}/>
                     <div className="text-sm text-center font-bold mt-1">{fmt(c.ccFeeAmt)}</div>
                   </div>
                 </div>
@@ -284,14 +275,12 @@
                     <div className="text-xs text-center text-gray-600 mt-1">Auto: 10% ≤ $20k; 9% $20k–$30k; 8% ≥ $30k</div>
                   </div>
                   <div className="border-2 rounded p-3">
-                    <Money label="RIDE ALONG FEE" value={row.rideAlong}
-                           onChange={v=>upd(idx,'rideAlong',onlyNum(v))}/>
+                    <Money label="RIDE ALONG FEE" value={row.rideAlong} onChange={v=>upd(idx,'rideAlong',onlyNum(v))}/>
                     <div className="text-center text-sm font-bold mt-1">
                       Per Person Split: {fmt((num(row.rideAlong)/(num(row.numVets)+num(row.numReps)||1)))}
                     </div>
                   </div>
-                  <Money label="RIDE ALONG BONUS" value={row.rideAlongBonus}
-                         onChange={v=>upd(idx,'rideAlongBonus',onlyNum(v))}/>
+                  <Money label="RIDE ALONG BONUS" value={row.rideAlongBonus} onChange={v=>upd(idx,'rideAlongBonus',onlyNum(v))}/>
                 </div>
 
                 <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -301,27 +290,19 @@
                 </div>
 
                 <div className="p-4 space-y-6">
-                  <Group
-                    label="VETS ON CONTRACT" count={row.numVets} setCount={v=>upd(idx,'numVets',v)}
-                    names={fit(row.vetNames,row.numVets)} per={c.perVet} color="green"
-                    setName={(i,val)=>updName(idx,'vet',i,val)}
-                  />
-                  <Group
-                    label="REPS ON CONTRACT" count={row.numReps} setCount={v=>upd(idx,'numReps',v)}
-                    names={fit(row.repNames,row.numReps)} per={c.perRep} color="purple"
-                    setName={(i,val)=>updName(idx,'rep',i,val)}
-                  />
-                  <Group
-                    label="RIDE ALONGS" count={row.numRideAlongs} setCount={v=>upd(idx,'numRideAlongs',v)}
-                    names={fit(row.rideAlongNames,row.numRideAlongs)} per={c.perRA} color="red"
-                    setName={(i,val)=>updName(idx,'rideAlong',i,val)}
-                  />
+                  <Group label="VETS ON CONTRACT" count={row.numVets} setCount={v=>upd(idx,'numVets',v)}
+                         names={fit(row.vetNames,row.numVets)} per={c.perVet} color="green"
+                         setName={(i,val)=>updName(idx,'vet',i,val)} />
+                  <Group label="REPS ON CONTRACT" count={row.numReps} setCount={v=>upd(idx,'numReps',v)}
+                         names={fit(row.repNames,row.numReps)} per={c.perRep} color="purple"
+                         setName={(i,val)=>updName(idx,'rep',i,val)} />
+                  <Group label="RIDE ALONGS" count={row.numRideAlongs} setCount={v=>upd(idx,'numRideAlongs',v)}
+                         names={fit(row.rideAlongNames,row.numRideAlongs)} per={c.perRA} color="red"
+                         setName={(i,val)=>updName(idx,'rideAlong',i,val)} />
                 </div>
               </div>
             );
           })}
-
-          {showPrintAll && <PrintAll rows={rows} onClose={()=>setShowPrintAll(false)}/>}
 
           {printIndex!==null && <PrintOne row={rows[printIndex]} index={printIndex} onClose={()=>setPrintIndex(null)}/>}
         </div>
@@ -404,142 +385,7 @@
       );
     }
 
-    /* ============== PRINT: REPORT (no profit) ============== */
-    function PrintAll({rows, onClose}){
-      const rowData = rows.map((row, idx) => {
-        const c = calcOne(row);
-        const vets = fit(row.vetNames, row.numVets);
-        const reps = fit(row.repNames, row.numReps);
-        const ras  = fit(row.rideAlongNames, row.numRideAlongs);
-        return {
-          idx: idx+1,
-          customer: row.customerName || 'N/A',
-          job: row.jobNumber || 'N/A',
-          vetsCount: num(row.numVets), perVet: c.perVet, totalVet: c.totalVets, vetNames: vets,
-          repsCount: num(row.numReps), perRep: c.perRep, totalRep: c.totalReps, repNames: reps,
-          rasCount: num(row.numRideAlongs), perRA: c.perRA, totalRA: c.rideAlongTotal, raNames: ras,
-          combined: c.combined
-        };
-      });
-
-      const hasVets = rowData.some(r => r.vetsCount>0);
-      const hasReps = rowData.some(r => r.repsCount>0);
-      const hasRAs  = rowData.some(r => r.rasCount>0);
-
-      const totals = rowData.reduce((a,r)=>({
-        totalVet: a.totalVet + r.totalVet,
-        totalRep: a.totalRep + r.totalRep,
-        totalRA:  a.totalRA  + r.totalRA,
-        combined: a.combined + r.combined
-      }), {totalVet:0,totalRep:0,totalRA:0,combined:0});
-
-      return (
-        <div className="overlay">
-          <div className="paper print-block w-full max-w-6xl">
-            <h2 className="text-xl font-bold text-center mb-3 print-title">ALTA CAL — PAYOUT REPORT</h2>
-
-            <table className="w-full border-2 border-black print-table mb-4">
-              <thead>
-                <tr>
-                  <th className="border border-black text-left">#</th>
-                  <th className="border border-black text-left">Customer</th>
-                  <th className="border border-black text-left">Job#</th>
-
-                  {hasVets && <>
-                    <th className="border border-black text-right"># Vets</th>
-                    <th className="border border-black text-right">Per Vet</th>
-                    <th className="border border-black text-right">Total Vets</th>
-                    <th className="border border-black text-left">Vet Names</th>
-                  </>}
-
-                  {hasReps && <>
-                    <th className="border border-black text-right"># Reps</th>
-                    <th className="border border-black text-right">Per Rep</th>
-                    <th className="border border-black text-right">Total Reps</th>
-                    <th className="border border-black text-left">Rep Names</th>
-                  </>}
-
-                  {hasRAs && <>
-                    <th className="border border-black text-right"># RAs</th>
-                    <th className="border border-black text-right">Per RA</th>
-                    <th className="border border-black text-right">Total RA</th>
-                    <th className="border border-black text-left">RA Names</th>
-                  </>}
-
-                  <th className="border border-black text-right bg-green-100">Combined</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rowData.map(r=>(
-                  <tr key={r.idx} className="odd:bg-white even:bg-gray-50">
-                    <td className="border border-black">{r.idx}</td>
-                    <td className="border border-black">{r.customer}</td>
-                    <td className="border border-black">{r.job}</td>
-
-                    {hasVets && <>
-                      <td className="border border-black text-right">{r.vetsCount||''}</td>
-                      <td className="border border-black text-right">{r.vetsCount?fmt(r.perVet):''}</td>
-                      <td className="border border-black text-right">{r.vetsCount?fmt(r.totalVet):''}</td>
-                      <td className="border border-black text-left">{r.vetNames.filter(Boolean).join(', ')}</td>
-                    </>}
-
-                    {hasReps && <>
-                      <td className="border border-black text-right">{r.repsCount||''}</td>
-                      <td className="border border-black text-right">{r.repsCount?fmt(r.perRep):''}</td>
-                      <td className="border border-black text-right">{r.repsCount?fmt(r.totalRep):''}</td>
-                      <td className="border border-black text-left">{r.repNames.filter(Boolean).join(', ')}</td>
-                    </>}
-
-                    {hasRAs && <>
-                      <td className="border border-black text-right">{r.rasCount||''}</td>
-                      <td className="border border-black text-right">{r.rasCount?fmt(r.perRA):''}</td>
-                      <td className="border border-black text-right">{r.rasCount?fmt(r.totalRA):''}</td>
-                      <td className="border border-black text-left">{r.raNames.filter(Boolean).join(', ')}</td>
-                    </>}
-
-                    <td className="border border-black text-right bg-green-50 font-semibold">{fmt(r.combined)}</td>
-                  </tr>
-                ))}
-
-                <tr className="bg-gray-100 font-bold">
-                  <td className="border border-black text-right" colSpan={3}>TOTALS</td>
-
-                  {hasVets && <>
-                    <td className="border border-black"></td>
-                    <td className="border border-black"></td>
-                    <td className="border border-black text-right">{fmt(totals.totalVet)}</td>
-                    <td className="border border-black"></td>
-                  </>}
-
-                  {hasReps && <>
-                    <td className="border border-black"></td>
-                    <td className="border border-black"></td>
-                    <td className="border border-black text-right">{fmt(totals.totalRep)}</td>
-                    <td className="border border-black"></td>
-                  </>}
-
-                  {hasRAs && <>
-                    <td className="border border-black"></td>
-                    <td className="border border-black"></td>
-                    <td className="border border-black text-right">{fmt(totals.totalRA)}</td>
-                    <td className="border border-black"></td>
-                  </>}
-
-                  <td className="border border-black text-right bg-green-100">{fmt(totals.combined)}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div className="no-print flex justify-center gap-2 mt-3">
-              <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={()=>window.print()}>PRINT</button>
-              <button className="bg-gray-600 text-white px-4 py-2 rounded" onClick={onClose}>CLOSE</button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    /* ============== PRINT: INDIVIDUAL (fits one page, no profit) ============== */
+    /* ============== PRINT: INDIVIDUAL ONLY (fills one page, no profit, no UI above) ============== */
     function PrintOne({row, index, onClose}){
       const c   = calcOne(row);
       const vets= fit(row.vetNames, row.numVets);
@@ -547,88 +393,90 @@
       const ras = fit(row.rideAlongNames, row.numRideAlongs);
 
       return (
-        <div className="overlay">
-          <div className="paper print-block w-full max-w-[7.8in]">
-            <h2 className="print-title font-bold text-center mb-3">ALTA CAL — CALCULATOR #{index+1}</h2>
+        <div className="overlay print-area">
+          <div className="paper print-block w-full max-w-[7.9in]">
+            <div className="print-section">
+              <h2 className="print-title font-bold text-center mb-3">ALTA CAL — CALCULATOR #{index+1}</h2>
 
-            <div className="mb-3 grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded border">
-              <div><span className="font-semibold">Customer:</span> <span className="font-semibold">{row.customerName || 'N/A'}</span></div>
-              <div><span className="font-semibold">Job#:</span> <span className="font-semibold">{row.jobNumber || 'N/A'}</span></div>
-            </div>
+              <div className="mb-3 grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded border">
+                <div><span className="font-semibold">Customer:</span> <span className="font-semibold">{row.customerName || 'N/A'}</span></div>
+                <div><span className="font-semibold">Job#:</span> <span className="font-semibold">{row.jobNumber || 'N/A'}</span></div>
+              </div>
 
-            <div className="mb-4 bg-blue-50 border-2 border-blue-400 rounded p-3">
-              <h3 className="print-subtitle font-bold mb-2">CONTRACT & FEE BREAKDOWN</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <div><strong>Contract:</strong> {fmt(c.contract)}</div>
-                <div><strong>House Fee %:</strong> {c.housePct || 0}% &nbsp; (<strong>Amt:</strong> {fmt(c.houseFee)})</div>
-                <div><strong>Finance Amount:</strong> {fmt(c.finance)}</div>
-                <div><strong>Dealer Fee %:</strong> {c.dealerPct || 0}% &nbsp; (<strong>Amt:</strong> {fmt(c.dealerFeeAmt)})</div>
-                <div><strong>Credit Card:</strong> {fmt(num(row.creditCard))}</div>
-                <div><strong>CC Fee %:</strong> {c.ccPct || 0}% &nbsp; (<strong>Amt:</strong> {fmt(c.ccFeeAmt)})</div>
-                <div><strong>Labor & Material:</strong> {fmt(c.labor)}</div>
-                <div className="font-semibold text-right"><strong>Total After Fees:</strong> {fmt(c.afterFees)}</div>
+              <div className="mb-4 bg-blue-50 border-2 border-blue-400 rounded p-3">
+                <h3 className="print-subtitle font-bold mb-2">CONTRACT & FEE BREAKDOWN</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  <div><strong>Contract:</strong> {fmt(c.contract)}</div>
+                  <div><strong>House Fee %:</strong> {c.housePct || 0}% &nbsp; (<strong>Amt:</strong> {fmt(c.houseFee)})</div>
+                  <div><strong>Finance Amount:</strong> {fmt(c.finance)}</div>
+                  <div><strong>Dealer Fee %:</strong> {c.dealerPct || 0}% &nbsp; (<strong>Amt:</strong> {fmt(c.dealerFeeAmt)})</div>
+                  <div><strong>Credit Card:</strong> {fmt(num(row.creditCard))}</div>
+                  <div><strong>CC Fee %:</strong> {c.ccPct || 0}% &nbsp; (<strong>Amt:</strong> {fmt(c.ccFeeAmt)})</div>
+                  <div><strong>Labor & Material:</strong> {fmt(c.labor)}</div>
+                  <div className="font-semibold text-right"><strong>Total After Fees:</strong> {fmt(c.afterFees)}</div>
+                </div>
               </div>
-            </div>
 
-            <div className="mb-4 grid grid-cols-3 gap-3">
-              <div className="border rounded p-2 text-center">
-                <div className="text-xs font-bold">VETS %</div>
-                <div className="print-chip font-semibold">{c.vetRate}%</div>
+              <div className="mb-4 grid grid-cols-3 gap-3">
+                <div className="border rounded p-2 text-center">
+                  <div className="text-xs font-bold">VETS %</div>
+                  <div className="print-chip font-semibold">{c.vetRate}%</div>
+                </div>
+                <div className="border rounded p-2 text-center">
+                  <div className="text-xs font-bold">REPS %</div>
+                  <div className="print-chip font-semibold">{c.repRate}%</div>
+                </div>
+                <div className="border rounded p-2 text-center">
+                  <div className="text-xs font-bold">MARGIN %</div>
+                  <div className="print-chip font-semibold">{(c.marginPct||0).toFixed(1)}%</div>
+                </div>
               </div>
-              <div className="border rounded p-2 text-center">
-                <div className="text-xs font-bold">REPS %</div>
-                <div className="print-chip font-semibold">{c.repRate}%</div>
-              </div>
-              <div className="border rounded p-2 text-center">
-                <div className="text-xs font-bold">MARGIN %</div>
-                <div className="print-chip font-semibold">{(c.marginPct||0).toFixed(1)}%</div>
-              </div>
-            </div>
 
-            {num(row.numVets)>0 && (
-              <div className="mb-3">
-                <div className="font-bold mb-1">Vets (Per: {fmt(c.perVet)})</div>
-                {vets.map((n,i)=>(
-                  <div key={i} className="flex justify-between border-b py-1">
-                    <span>{n || `Vet ${i+1}`}</span><span className="font-semibold">{fmt(c.perVet)}</span>
-                  </div>
-                ))}
-                <div className="text-right mt-1"><strong>Total Vets:</strong> {fmt(c.totalVets)}</div>
-              </div>
-            )}
+              {num(row.numVets)>0 && (
+                <div className="mb-3">
+                  <div className="font-bold mb-1">Vets (Per: {fmt(c.perVet)})</div>
+                  {vets.map((n,i)=>(
+                    <div key={i} className="flex justify-between border-b py-1">
+                      <span>{n || `Vet ${i+1}`}</span><span className="font-semibold">{fmt(c.perVet)}</span>
+                    </div>
+                  ))}
+                  <div className="text-right mt-1"><strong>Total Vets:</strong> {fmt(c.totalVets)}</div>
+                </div>
+              )}
 
-            {num(row.numReps)>0 && (
-              <div className="mb-3">
-                <div className="font-bold mb-1">Reps (Per: {fmt(c.perRep)})</div>
-                {reps.map((n,i)=>(
-                  <div key={i} className="flex justify-between border-b py-1">
-                    <span>{n || `Rep ${i+1}`}</span><span className="font-semibold">{fmt(c.perRep)}</span>
-                  </div>
-                ))}
-                <div className="text-right mt-1"><strong>Total Reps:</strong> {fmt(c.totalReps)}</div>
-              </div>
-            )}
+              {num(row.numReps)>0 && (
+                <div className="mb-3">
+                  <div className="font-bold mb-1">Reps (Per: {fmt(c.perRep)})</div>
+                  {reps.map((n,i)=>(
+                    <div key={i} className="flex justify-between border-b py-1">
+                      <span>{n || `Rep ${i+1}`}</span><span className="font-semibold">{fmt(c.perRep)}</span>
+                    </div>
+                  ))}
+                  <div className="text-right mt-1"><strong>Total Reps:</strong> {fmt(c.totalReps)}</div>
+                </div>
+              )}
 
-            {num(row.numRideAlongs)>0 && (
-              <div className="mb-3">
-                <div className="font-bold mb-1">Ride Alongs (Per: {fmt(c.perRA)})</div>
-                {ras.map((n,i)=>(
-                  <div key={i} className="flex justify-between border-b py-1">
-                    <span>{n || `Ride Along ${i+1}`}</span><span className="font-semibold">{fmt(c.perRA)}</span>
-                  </div>
-                ))}
-                <div className="text-right mt-1"><strong>Total RA Payout:</strong> {fmt(c.rideAlongTotal)}</div>
-              </div>
-            )}
+              {num(row.numRideAlongs)>0 && (
+                <div className="mb-3">
+                  <div className="font-bold mb-1">Ride Alongs (Per: {fmt(c.perRA)})</div>
+                  {ras.map((n,i)=>(
+                    <div key={i} className="flex justify-between border-b py-1">
+                      <span>{n || `Ride Along ${i+1}`}</span><span className="font-semibold">{fmt(c.perRA)}</span>
+                    </div>
+                  ))}
+                  <div className="text-right mt-1"><strong>Total RA Payout:</strong> {fmt(c.rideAlongTotal)}</div>
+                </div>
+              )}
 
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <div className="bg-green-50 border border-green-400 rounded p-3 text-center">
-                <div className="text-xs font-bold">COMBINED PAYOUT</div>
-                <div className="font-semibold text-lg">{fmt(c.combined)}</div>
-              </div>
-              <div className="bg-blue-50 border border-blue-400 rounded p-3 text-center">
-                <div className="text-xs font-bold">TOTAL AFTER FEES</div>
-                <div className="font-semibold text-lg">{fmt(c.afterFees)}</div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="bg-green-50 border border-green-400 rounded p-3 text-center">
+                  <div className="text-xs font-bold">COMBINED PAYOUT</div>
+                  <div className="font-semibold text-lg">{fmt(c.combined)}</div>
+                </div>
+                <div className="bg-blue-50 border border-blue-400 rounded p-3 text-center">
+                  <div className="text-xs font-bold">TOTAL AFTER FEES</div>
+                  <div className="font-semibold text-lg">{fmt(c.afterFees)}</div>
+                </div>
               </div>
             </div>
 
