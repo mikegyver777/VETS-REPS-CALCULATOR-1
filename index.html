@@ -5,99 +5,461 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>ALTA CAL PROFIT SHARE</title>
 
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React UMD (no Babel, works on iOS) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
     html { -webkit-text-size-adjust: 100%; }
-    input, button { font-size: 16px; }
     * { -webkit-tap-highlight-color: transparent; }
+    input, button { font-size: 16px; }
 
-    @media (max-width: 640px) {
-      .header-wrap { flex-wrap: wrap; }
-      .header-actions { width: 100%; display: flex; gap: 8px; margin-top: 8px; }
-      .header-actions button { flex: 1 1 auto; }
+    /* pills like screenshot */
+    .pill {
+      border-width:2px; border-radius:10px; padding:8px 12px; display:flex; justify-content:space-between; gap:12px;
+      background:#fff;
+    }
+    .pill-purple { border-color:#7c3aed; }
+    .pill-purple .amt { color:#7c3aed; font-weight:800; }
+    .pill-red { border-color:#ef4444; }
+    .pill-red .amt { color:#ef4444; font-weight:800; }
+
+    /* PRINT */
+    @media print{
+      @page { size: legal; margin: 0.5in; }
+      body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .no-print { display:none !important; }
+      .print-page { page-break-after: always; }
+      .print h1{ font-size:22px; margin:0 0 10px; text-align:center; border-bottom:3px solid #000; padding-bottom:6px; }
+      .print h2{ font-size:16px; margin:10px 0 6px; }
+      .print table{ width:100%; border-collapse:collapse; }
+      .print th,.print td{ border:1px solid #000; padding:6px 8px; font-size:14px; }
     }
   </style>
 </head>
 <body class="bg-gray-100">
   <div id="root"></div>
 
-  <script type="text/babel" data-presets="env,react">
-    const fmt = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((+n)||0);
-    const num = s => { const x=parseFloat(String(s??'').replace(/[,$]/g,'')); return Number.isFinite(x)?x:0; };
-    const onlyNum = s => (s||'').replace(/[^0-9.]/g,'');
-    const onlyInt = s => (s||'').replace(/[^0-9]/g,'');
-    const fit = (arr, count) => { const c = Math.max(0, parseInt(count||0,10)||0); const base = Array.isArray(arr)?[...arr]:[]; if(base.length>c) return base.slice(0,c); while(base.length<c) base.push(''); return base; };
-    const defaultHousePct = a => num(a)<=20000?10:num(a)<30000?9:8;
-    const pctFee = (a,p)=>num(a)*(num(p)/100);
-
-    function calcOne(d){
-      const housePct=d.houseFeeManual?num(d.houseFeePercent):(d.houseFeePercent?num(d.houseFeePercent):defaultHousePct(d.contractAmount));
-      const contract=num(d.contractAmount), houseFee=contract*(housePct/100);
-      const dealerFeeAmt=pctFee(d.financeAmount,d.dealerFee);
-      const ccFeeAmt=pctFee(d.creditCard,d.creditCardFee);
-      const afterHouse=contract-houseFee, afterFees=afterHouse-num(d.laborMaterial)-dealerFeeAmt;
-      const marginPct=afterHouse>0?(afterFees/afterHouse)*100:0;
-      let vetRate=25,repRate=20;
-      if(marginPct>=50){vetRate=55;repRate=40;} else if(marginPct>=40){vetRate=45;repRate=30;} else if(marginPct>=33){vetRate=35;repRate=25;}
-      const vets=num(d.numVets),reps=num(d.numReps),people=vets+reps;
-      const vetPool=afterFees*(vetRate/100),repPool=afterFees*(repRate/100);
-      const perVet=people?vetPool/people:0,perRep=people?repPool/people:0;
-      const rideAlongFee=num(d.rideAlong),rideAlongBonus=num(d.rideAlongBonus),rideAlongTotal=rideAlongFee+rideAlongBonus;
-      const rideAlongPer=people?rideAlongFee/people:0,ccPer=people?ccFeeAmt/people:0;
-      const netPerVet=perVet-rideAlongPer-ccPer,netPerRep=perRep-rideAlongPer-ccPer;
-      const totalVets=netPerVet*vets,totalReps=netPerRep*reps,ras=num(d.numRideAlongs),perRA=ras?(rideAlongTotal/ras):0;
-      return {contract,housePct,houseFee,finance:num(d.financeAmount),dealerPct:num(d.dealerFee),dealerFeeAmt,credit:num(d.creditCard),ccPct:num(d.creditCardFee),ccFeeAmt,labor:num(d.laborMaterial),afterFees,marginPct,vetRate,repRate,perVet:netPerVet,perRep:netPerRep,totalVets,totalReps,perRA,rideAlongTotal,combined:totalVets+totalReps};
-    }
-
-    function openPrintWindow(html,title='Print'){
-      const win=window.open('','_blank'); if(!win){alert('Pop-up blocked.');return;}
-      win.document.open();
-      win.document.write(`<!doctype html><html><head>
-        <meta charset="utf-8"><title>${title}</title>
-        <style>
-          html,body{margin:0;padding:0;}
-          @page{size:auto;margin:10mm;}
-          body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif;color:#111;}
-          h1,h2,h3{margin:0 0 8px;}
-          .box{border:2px solid #000;border-radius:6px;padding:10px;margin-bottom:10px;}
-          .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-          .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
-          .row{display:flex;justify-content:space-between;border-bottom:1px solid #ddd;padding:4px 0;}
-          table{width:100%;border-collapse:collapse;}
-          th,td{border:1px solid #000;padding:6px 8px;font-size:12px;}
-          .right{text-align:right;}
-          .muted{color:#555;}
-          .page{page-break-after:always;}
-          .page:first-of-type{page-break-before:avoid;}
-          .chip{border:1px solid #000;border-radius:6px;padding:6px 8px;text-align:center;}
-          .total{font-weight:700;}
-        </style>
-      </head><body>${html.trim()}</body></html>`);
-      win.document.close();
-      setTimeout(()=>{win.focus();win.print();},50);
-    }
-
-    /* -- everything else below remains the same, shortened here for brevity -- */
-    /* Your App, calcOne, buildSingleHTML, buildReportHTML, etc. all stay unchanged. */
-    /* ... [unchanged rest of your code as before] ... */
-
-    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-  </script>
-
-  <!-- ✅ FIX FOR IPHONE/IPAD BLANK PAGE -->
   <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      setTimeout(() => {
-        if (window.React && window.ReactDOM && document.getElementById('root').innerHTML.trim() === '') {
-          ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-        }
-      }, 400);
-    });
+    const { useState, useMemo } = React;
+    const h = React.createElement;
+
+    // ---------- utils ----------
+    const n = v => {
+      const x = parseFloat(String(v ?? '').replace(/[,$]/g,''));
+      return Number.isFinite(x) ? x : 0;
+    };
+    const onlyNum = s => String(s||'').replace(/[^0-9.]/g,'');
+    const onlyInt = s => String(s||'').replace(/[^0-9]/g,'');
+    const fmt = v => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(v)||0);
+
+    const defaultHousePct = (contractAmount) => {
+      const a = n(contractAmount);
+      if (a <= 20000) return 10;
+      if (a <= 30000) return 9;
+      return 8;
+    };
+
+    function rates(afterFees, afterHouse){
+      const m = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
+      let vet=25, rep=20;
+      if (m>=50){ vet=55; rep=40; }
+      else if (m>=40){ vet=45; rep=30; }
+      else if (m>=33){ vet=35; rep=25; }
+      return { vet, rep, margin:m };
+    }
+
+    function compute(row){
+      const contract = n(row.contractAmount);
+      const housePct = row.houseFeePercent ? n(row.houseFeePercent) : defaultHousePct(contract);
+      const houseFee = contract * housePct/100;
+
+      const finance = n(row.financeAmount);
+      const dealerPct = n(row.dealerFee);
+      const dealerFeeAmt = finance * dealerPct/100;
+
+      const credit = n(row.creditCard);
+      const ccPct = n(row.creditCardFee);
+      const ccFeeAmt = credit * ccPct/100;
+
+      const labor = n(row.laborMaterial);
+
+      const afterHouse = contract - houseFee;
+      const afterFees = afterHouse - labor - dealerFeeAmt; // no profit displayed
+
+      const { vet, rep, margin } = rates(afterFees, afterHouse);
+
+      const vets = n(row.numVets), reps = n(row.numReps), people = vets+reps || 0;
+
+      const vetPool = afterFees * vet/100;
+      const repPool = afterFees * rep/100;
+
+      const perVetBase = people ? (vetPool/people) : 0;
+      const perRepBase = people ? (repPool/people) : 0;
+
+      const rideAlongFee = n(row.rideAlong);
+      const rideAlongBonus = n(row.rideAlongBonus);
+      const rideAlongTotal = rideAlongFee + rideAlongBonus;
+
+      const rideAlongPerPerson = people ? (rideAlongFee/people) : 0;
+      const ccPerPerson = people ? (ccFeeAmt/people) : 0;
+
+      const perVet = perVetBase - rideAlongPerPerson - ccPerPerson;
+      const perRep = perRepBase - rideAlongPerPerson - ccPerPerson;
+
+      return {
+        contract, housePct, houseFee,
+        finance, dealerPct, dealerFeeAmt,
+        credit, ccPct, ccFeeAmt,
+        labor, afterFees, afterHouse,
+        vetPct:vet, repPct:rep, margin,
+        perVet, perRep,
+        rideAlongTotal,
+        perRA: (n(row.numRideAlongs) ? (rideAlongTotal / n(row.numRideAlongs)) : 0)
+      };
+    }
+
+    const fit = (arr, count) => {
+      const c = Math.max(0, parseInt(count||0,10)||0);
+      const base = Array.isArray(arr) ? [...arr] : [];
+      if (base.length > c) return base.slice(0,c);
+      while (base.length < c) base.push('');
+      return base;
+    };
+
+    function openPrint(html,title){
+      const w = window.open('', '_blank');
+      if(!w){ alert('Pop-up blocked. Allow pop-ups for this site.'); return; }
+      w.document.open();
+      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head>
+        <body class="print">${html}</body></html>`);
+      w.document.close();
+      setTimeout(()=>{ w.focus(); w.print(); }, 80);
+    }
+
+    function buildSingle(row, idx){
+      const c = compute(row);
+      const vetNames = fit(row.vetNames, row.numVets);
+      const repNames = fit(row.repNames, row.numReps);
+      const raNames  = fit(row.rideAlongNames, row.numRideAlongs);
+
+      const vetsBlock = vetNames.length ? `
+        <h2>VETS (Per: ${fmt(c.perVet)})</h2>
+        <table><thead><tr><th>Name</th><th>Payout</th></tr></thead>
+          <tbody>${vetNames.map(v=>`<tr><td>${(v||'').toString().trim()}</td><td>${fmt(c.perVet)}</td></tr>`).join('')}</tbody>
+        </table>` : '';
+
+      const repsBlock = repNames.length ? `
+        <h2>REPS (Per: ${fmt(c.perRep)})</h2>
+        <table><thead><tr><th>Name</th><th>Payout</th></tr></thead>
+          <tbody>${repNames.map(v=>`<tr><td>${(v||'').toString().trim()}</td><td>${fmt(c.perRep)}</td></tr>`).join('')}</tbody>
+        </table>` : '';
+
+      const raBlock = raNames.length ? `
+        <h2>RIDE ALONGS (Per: ${fmt(c.perRA)})</h2>
+        <table><thead><tr><th>Name</th><th>Payout</th></tr></thead>
+          <tbody>${raNames.map(v=>`<tr><td>${(v||'').toString().trim()}</td><td>${fmt(c.perRA)}</td></tr>`).join('')}</tbody>
+        </table>` : '';
+
+      const html = `
+        <div class="print-page">
+          <h1>ALTA CAL — CALCULATOR #${idx+1}</h1>
+          <table style="margin-bottom:8px">
+            <tbody>
+              <tr><th>Customer</th><td>${(row.customerName||'').toString().trim() || 'N/A'}</td></tr>
+              <tr><th>Job#</th><td>${(row.jobNumber||'').toString().trim() || 'N/A'}</td></tr>
+            </tbody>
+          </table>
+
+          <h2>CONTRACT & FEE BREAKDOWN</h2>
+          <table style="margin-bottom:12px">
+            <tbody>
+              <tr><th>Contract</th><td>${fmt(c.contract)}</td></tr>
+              <tr><th>Finance Amount</th><td>${fmt(c.finance)}</td></tr>
+              <tr><th>Credit Card</th><td>${fmt(c.credit)}</td></tr>
+              <tr><th>Labor & Material</th><td>${fmt(c.labor)}</td></tr>
+              <tr><th>House Fee %</th><td>${c.housePct}% (Amt: ${fmt(c.houseFee)})</td></tr>
+              <tr><th>Dealer Fee %</th><td>${c.dealerPct}% (Amt: ${fmt(c.dealerFeeAmt)})</td></tr>
+              <tr><th>CC Fee %</th><td>${c.ccPct}% (Amt: ${fmt(c.ccFeeAmt)})</td></tr>
+              <tr><th>Total After Fees</th><td>${fmt(c.afterFees)}</td></tr>
+            </tbody>
+          </table>
+
+          <table style="margin-bottom:12px">
+            <thead><tr><th>VETS %</th><th>REPS %</th></tr></thead>
+            <tbody><tr><td>${c.vetPct}%</td><td>${c.repPct}%</td></tr></tbody>
+          </table>
+
+          ${vetsBlock}
+          ${repsBlock}
+          ${raBlock}
+        </div>`;
+      return html;
+    }
+
+    function buildReport(rows){
+      // rows table
+      const fileRows = rows.map((row,i)=>{
+        const c = compute(row);
+        const v = n(row.numVets), r = n(row.numReps), ra = n(row.numRideAlongs);
+        return `<tr>
+          <td>${i+1}</td>
+          <td>${(row.customerName||'').toString().trim() || 'N/A'}</td>
+          <td>${(row.jobNumber||'').toString().trim() || 'N/A'}</td>
+          <td class="right">${v||''}</td>
+          <td class="right">${v?fmt(c.perVet):''}</td>
+          <td class="right">${v?fmt(c.perVet*v):''}</td>
+          <td class="right">${r||''}</td>
+          <td class="right">${r?fmt(c.perRep):''}</td>
+          <td class="right">${r?fmt(c.perRep*r):''}</td>
+          <td class="right">${ra||''}</td>
+          <td class="right">${ra?fmt(c.perRA):''}</td>
+          <td class="right">${ra?fmt(c.perRA*ra):''}</td>
+        </tr>`;
+      }).join('');
+
+      // per-person totals
+      const totals = {};
+      const push = (name, amt) => {
+        const key = (name||'').toString().trim() || '(Unnamed)';
+        totals[key] = (totals[key]||0) + (amt||0);
+      };
+      rows.forEach(row=>{
+        const c = compute(row);
+        fit(row.vetNames,row.numVets).forEach(nm=>push(nm,c.perVet));
+        fit(row.repNames,row.numReps).forEach(nm=>push(nm,c.perRep));
+        fit(row.rideAlongNames,row.numRideAlongs).forEach(nm=>push(nm,c.perRA));
+      });
+      const people = Object.entries(totals).sort((a,b)=>a[0].localeCompare(b[0]));
+      const peopleRows = people.map(([nm,amt])=>`<tr><td>${nm}</td><td class="right">${fmt(amt)}</td></tr>`).join('') || '<tr><td colspan="2">(No names)</td></tr>';
+
+      const html = `
+        <div class="print-page">
+          <h1>ALTA CAL PROFIT SHARE — PAYOUT REPORT</h1>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Customer</th><th>Job#</th>
+                <th>Vets</th><th>Per Vet</th><th>Total Vets</th>
+                <th>Reps</th><th>Per Rep</th><th>Total Reps</th>
+                <th>RAs</th><th>Per RA</th><th>Total RA</th>
+              </tr>
+            </thead>
+            <tbody>${fileRows}</tbody>
+          </table>
+
+          <h2>TOTAL BY PERSON (ALL FILES)</h2>
+          <table>
+            <thead><tr><th>Person</th><th>Amount</th></tr></thead>
+            <tbody>${peopleRows}</tbody>
+          </table>
+        </div>`;
+      return html;
+    }
+
+    // ---------- UI primitive creators (no JSX) ----------
+    const Label = (t)=>h('label',{className:'text-xs font-bold text-black block mb-1 uppercase tracking-wide'},t);
+    const Input = (props)=>h('input', Object.assign({
+      className:'w-full px-2 py-1 border-2 border-black rounded focus:outline-none'
+    }, props));
+    const MoneyInput = ({label,value,onChange}) => h('div',{},[
+      Label(label),
+      h('div',{className:'flex items-center bg-white border-2 border-black rounded px-2 py-1'},[
+        h('span',{className:'mr-1'},'$'),
+        Input({type:'text', inputMode:'decimal', value:value||'', onChange:(e)=>onChange(onlyNum(e.target.value)), style:{textAlign:'right'}})
+      ])
+    ]);
+    const PercentInput = ({label,value,onChange}) => h('div',{},[
+      Label(label),
+      h('div',{className:'flex items-center bg-white border-2 border-black rounded px-2 py-1'},[
+        Input({type:'text', inputMode:'decimal', value:value||'', onChange:(e)=>onChange(onlyNum(e.target.value)), style:{textAlign:'right'}}),
+        h('span',{className:'ml-2'},'%')
+      ])
+    ]);
+
+    function NamesWithPills({kind, count, names, per, color, onSet}) {
+      if (n(count)<=0) return null;
+      const title = kind.toUpperCase();
+      return h('div',{},[
+        h('div',{className:'text-xs font-bold mb-1 uppercase'}, title),
+        ...fit(names,count).map((name,i)=>h('div',{key:i, className:`pill ${color==='purple'?'pill-purple':'pill-red'} mb-2`},[
+          Input({
+            type:'text', value:name||'',
+            onChange:(e)=>onSet(i, e.target.value),
+            className:'flex-1 px-2 py-1 border-0 outline-none'
+          }),
+          h('div',{className:'amt'}, fmt(per))
+        ]))
+      ]);
+    }
+
+    function CardTotal({label, value}) {
+      return h('div',{className:'text-center border-2 border-black rounded py-3 bg-white'},[
+        h('div',{className:'text-xs font-bold mb-1 uppercase'},label),
+        h('div',{className:'text-2xl font-bold'}, value)
+      ]);
+    }
+
+    // ---------- Calculator ----------
+    function CalcCard({row,index,rows,setRows,onPrint}) {
+      const c = useMemo(()=>compute(row), [row]);
+
+      const upd = (k,v)=>{
+        setRows(a=>{
+          const x=[...a], r={...x[index]};
+          if (k==='contractAmount') {
+            r.contractAmount = onlyNum(v);
+            if (!r.houseFeePercent || r.houseFeePercent === String(defaultHousePct(row.contractAmount))) {
+              r.houseFeePercent = String(defaultHousePct(r.contractAmount));
+            }
+          } else if (k==='houseFeePercent') {
+            r.houseFeePercent = onlyNum(v);
+          } else if (k==='numVets') {
+            r.numVets = onlyInt(v); r.vetNames = fit(r.vetNames, r.numVets);
+          } else if (k==='numReps') {
+            r.numReps = onlyInt(v); r.repNames = fit(r.repNames, r.numReps);
+          } else if (k==='numRideAlongs') {
+            r.numRideAlongs = onlyInt(v); r.rideAlongNames = fit(r.rideAlongNames, r.numRideAlongs);
+          } else {
+            r[k]=v;
+          }
+          x[index]=r; return x;
+        });
+      };
+
+      const setName = (key,i,val)=>{
+        setRows(a=>{
+          const x=[...a], r={...x[index]};
+          const map = {vet:'vetNames', rep:'repNames', ra:'rideAlongNames'};
+          const field = map[key];
+          r[field] = fit(r[field], key==='vet'?r.numVets:key==='rep'?r.numReps:r.numRideAlongs);
+          r[field][i] = val;
+          x[index]=r; return x;
+        });
+      };
+
+      return h('div',{className:'bg-white rounded-lg border-4 border-gray-300 mb-6'},[
+        h('div',{className:'bg-blue-300 py-2 px-3 border-b-2 border-black flex items-center justify-between rounded-t'},[
+          h('div',{className:'text-sm font-bold uppercase'} ,`CALCULATOR #${index+1}`),
+          h('button',{className:'bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded', onClick:()=>onPrint(index)},'Print')
+        ]),
+
+        // Header inputs
+        h('div',{className:'grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 border-b-2 border-black'},[
+          h('div',{},[ Label('Customer Name'), Input({type:'text', value:row.customerName||'', onChange:(e)=>upd('customerName', e.target.value)}) ]),
+          h('div',{},[ Label('Job Number'), Input({type:'text', value:row.jobNumber||'', onChange:(e)=>upd('jobNumber', e.target.value)}) ])
+        ]),
+
+        // Finance & fees
+        h('div',{className:'p-4 grid grid-cols-1 md:grid-cols-2 gap-4'},[
+          h('div',{},[
+            h('div',{className:'grid grid-cols-1 md:grid-cols-3 gap-4'},[
+              MoneyInput({label:'Contract Amount', value:row.contractAmount, onChange:(v)=>upd('contractAmount', v)}),
+              MoneyInput({label:'Cash/Check', value:row.cashCheck, onChange:(v)=>upd('cashCheck', v)}),
+              MoneyInput({label:'Labor & Material', value:row.laborMaterial, onChange:(v)=>upd('laborMaterial', v)}),
+            ]),
+            h('div',{className:'mt-4 grid grid-cols-1 md:grid-cols-2 gap-4'},[
+              h('div',{},[
+                MoneyInput({label:'Finance Amount', value:row.financeAmount, onChange:(v)=>upd('financeAmount', v)}),
+                PercentInput({label:'Dealer Fee (%)', value:row.dealerFee, onChange:(v)=>upd('dealerFee', v)}),
+                h('div',{className:'text-center text-sm font-bold text-green-700 mt-1'}, fmt(c.dealerFeeAmt))
+              ]),
+              h('div',{},[
+                MoneyInput({label:'Credit Card', value:row.creditCard, onChange:(v)=>upd('creditCard', v)}),
+                PercentInput({label:'CC Fee (%)', value:row.creditCardFee, onChange:(v)=>upd('creditCardFee', v)}),
+                h('div',{className:'text-center text-sm font-bold text-green-700 mt-1'}, fmt(c.ccFeeAmt))
+              ])
+            ])
+          ]),
+          h('div',{},[
+            h('div',{className:'grid grid-cols-1 md:grid-cols-3 gap-4'},[
+              h('div',{},[
+                PercentInput({label:'House Fee (%)', value:row.houseFeePercent, onChange:(v)=>upd('houseFeePercent', v)}),
+                h('div',{className:'text-center text-sm mt-2'}, `House: ${fmt(c.houseFee)}`),
+                h('div',{className:'text-[11px] text-center text-gray-600 mt-1'},'Auto: 10% ≤ $20k; 9% ≤ $30k; 8% > $30k')
+              ]),
+              h('div',{},[
+                MoneyInput({label:'Ride Along Fee', value:row.rideAlong, onChange:(v)=>upd('rideAlong', v)}),
+                h('div',{className:'text-center text-sm mt-2'}, `Per Person Split: ${fmt((n(row.rideAlong)/(n(row.numVets)+n(row.numReps) || 1)))}`)
+              ]),
+              MoneyInput({label:'Ride Along Bonus', value:row.rideAlongBonus, onChange:(v)=>upd('rideAlongBonus', v)})
+            ]),
+            h('div',{className:'mt-4 grid grid-cols-1 md:grid-cols-3 gap-4'},[
+              CardTotal({label:'Total After Fees', value:fmt(c.afterFees)}),
+              CardTotal({label:'Vets %', value:`${c.vetPct}%`}),
+              CardTotal({label:'Reps %', value:`${c.repPct}%`})
+            ])
+          ])
+        ]),
+
+        // Counts + names + chips
+        h('div',{className:'px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-6'},[
+          // VETS
+          h('div',{},[
+            Label('Vets on Contract'),
+            Input({type:'text', inputMode:'numeric', value:row.numVets||'', onChange:(e)=>upd('numVets', e.target.value)}),
+            n(row.numVets)>0 ? h('div',{className:'mt-3 text-sm font-bold text-center'} ,`Per Vet: ${fmt(c.perVet)}`) : null,
+            NamesWithPills({kind:'vet', count:row.numVets, names:fit(row.vetNames,row.numVets), per:c.perVet, color:'purple',
+              onSet:(i,val)=>setName('vet',i,val)})
+          ]),
+          // REPS
+          h('div',{},[
+            Label('Reps on Contract'),
+            Input({type:'text', inputMode:'numeric', value:row.numReps||'', onChange:(e)=>upd('numReps', e.target.value)}),
+            n(row.numReps)>0 ? h('div',{className:'mt-3 text-sm font-bold text-center'} ,`Per Rep: ${fmt(c.perRep)}`) : null,
+            NamesWithPills({kind:'rep', count:row.numReps, names:fit(row.repNames,row.numReps), per:c.perRep, color:'purple',
+              onSet:(i,val)=>setName('rep',i,val)})
+          ]),
+          // RAs
+          h('div',{},[
+            Label('Ride Alongs'),
+            Input({type:'text', inputMode:'numeric', value:row.numRideAlongs||'', onChange:(e)=>upd('numRideAlongs', e.target.value)}),
+            n(row.numRideAlongs)>0 ? h('div',{className:'mt-3 text-sm font-bold text-center'} ,`Per RA: ${fmt(c.perRA)}`) : null,
+            NamesWithPills({kind:'ra', count:row.numRideAlongs, names:fit(row.rideAlongNames,row.numRideAlongs), per:c.perRA, color:'red',
+              onSet:(i,val)=>setName('ra',i,val)})
+          ])
+        ])
+      ]);
+    }
+
+    function App(){
+      const blank = ()=>({
+        id: Date.now()+Math.random(),
+        customerName:'', jobNumber:'',
+        contractAmount:'', cashCheck:'',
+        financeAmount:'', dealerFee:'',
+        creditCard:'', creditCardFee:'',
+        houseFeePercent:'', // auto if left blank
+        laborMaterial:'', rideAlong:'', rideAlongBonus:'',
+        numVets:'', numReps:'', numRideAlongs:'',
+        vetNames:[], repNames:[], rideAlongNames:[]
+      });
+
+      const [rows, setRows] = useState([blank()]);
+
+      const printOne = (i)=> openPrint(buildSingle(rows[i], i), `Calculator #${i+1}`);
+      const printReport = ()=> openPrint(buildReport(rows), 'Payout Report');
+
+      return h('div',{className:'max-w-6xl mx-auto p-4'},[
+        // top header
+        h('div',{className:'bg-white rounded-lg shadow-lg p-4 mb-4 border-4 border-blue-500'},[
+          h('div',{className:'flex items-center justify-between'},[
+            h('h1',{className:'text-xl font-bold text-blue-800'},'ALTA CAL PROFIT SHARE'),
+            h('div',{className:'flex gap-2'},[
+              h('button',{className:'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded', onClick:printReport},'Print Report'),
+              h('button',{className:'bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded', onClick:()=>setRows(r=>[...r, blank()])},'Add File')
+            ])
+          ])
+        ]),
+        // calculators
+        ...rows.map((row,i)=>h(CalcCard,{key:row.id, row, index:i, rows, setRows, onPrint:printOne}))
+      ]);
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
   </script>
 </body>
 </html>
