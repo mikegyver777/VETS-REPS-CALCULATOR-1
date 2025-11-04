@@ -38,11 +38,9 @@
   <div id="root"></div>
 
   <script>
-    // ---------- React helpers ----------
     const { useState, useMemo } = React;
     const h = React.createElement;
 
-    // ---------- safe helpers ----------
     const num = v => {
       const x = parseFloat(String(v ?? '').replace(/[,$]/g,''));
       return Number.isFinite(x) ? x : 0;
@@ -130,46 +128,33 @@
         '<!doctype html><html><head><meta charset="utf-8"><title>'+title+
         '</title><style>@page{size:legal;margin:0.5in}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}'+
         '.print-page{page-break-after:always}.print h1{font-size:22px;margin:0 0 10px;text-align:center;border-bottom:3px solid #000;padding-bottom:6px}'+
-        '.print h2{font-size:16px;margin:10px 0 6px}.print table{width:100%;border-collapse:collapse}.print th,.print td{border:1px solid #000;padding:6px 8px;font-size:14px}.right{text-align:right}</style></head><body class="print">'+
+        '.print h2{font-size:16px;margin:10px 0 6px}.print table{width:100%;border-collapse:collapse}.print th,.print td{border:1px solid #000;padding:6px 8px;font-size:14px}.right{text-align:right}.top-pad{margin-top:12mm}</style></head><body class="print">'+
         html+'</body></html>'
       );
       w.document.close();
       setTimeout(()=>{ w.focus(); w.print(); }, 80);
     }
 
+    /* ===== INDIVIDUAL PRINT (header removed, top padding added) ===== */
     function buildSingle(row, idx){
       const c = compute(row);
       const vetNames = fit(row.vetNames, row.numVets);
       const repNames = fit(row.repNames, row.numReps);
       const raNames  = fit(row.rideAlongNames, row.numRideAlongs);
 
-      const vetsBlock = vetNames.length ? (
-        '<h2>VETS (Per: '+fmt(c.perVet)+')</h2>'+
+      const peopleBlock = (title, per, list) => list.length ? (
+        '<h2>'+title+' (Per: '+fmt(per)+')</h2>'+
         '<table><thead><tr><th>Name</th><th>Payout</th></tr></thead><tbody>'+
-        vetNames.map(v=>'<tr><td>'+(String(v||'').trim())+'</td><td class="right">'+fmt(c.perVet)+'</td></tr>').join('')+
-        '</tbody></table>'
-      ) : '';
-
-      const repsBlock = repNames.length ? (
-        '<h2>REPS (Per: '+fmt(c.perRep)+')</h2>'+
-        '<table><thead><tr><th>Name</th><th>Payout</th></tr></thead><tbody>'+
-        repNames.map(v=>'<tr><td>'+(String(v||'').trim())+'</td><td class="right">'+fmt(c.perRep)+'</td></tr>').join('')+
-        '</tbody></table>'
-      ) : '';
-
-      const raBlock = raNames.length ? (
-        '<h2>RIDE ALONGS (Per: '+fmt(c.perRA)+')</h2>'+
-        '<table><thead><tr><th>Name</th><th>Payout</th></tr></thead><tbody>'+
-        raNames.map(v=>'<tr><td>'+(String(v||'').trim())+'</td><td class="right">'+fmt(c.perRA)+'</td></tr>').join('')+
+        list.map(n=>'<tr><td>'+ (String(n||'').trim()) +'</td><td class="right">'+fmt(per)+'</td></tr>').join('')+
         '</tbody></table>'
       ) : '';
 
       return (
-        '<div class="print-page">'+
-          '<h1>ALTA CAL — CALCULATOR #'+(idx+1)+'</h1>'+
+        '<div class="print-page top-pad">'+
+          /* Customer + Job row (no big title) */
           '<table style="margin-bottom:8px"><tbody>'+
-            '<tr><th>Customer</th><td>'+(String(row.customerName||'').trim()||'N/A')+'</td></tr>'+
-            '<tr><th>Job#</th><td>'+(String(row.jobNumber||'').trim()||'N/A')+'</td></tr>'+
+            '<tr><th>Customer</th><td>'+ (String(row.customerName||'').trim()||'N/A') +'</td></tr>'+
+            '<tr><th>Job#</th><td>'+ (String(row.jobNumber||'').trim()||'N/A') +'</td></tr>'+
           '</tbody></table>'+
 
           '<h2>CONTRACT & FEE BREAKDOWN</h2>'+
@@ -184,14 +169,17 @@
             '<tr><th>Total After Fees</th><td>'+fmt(c.afterFees)+'</td></tr>'+
           '</tbody></table>'+
 
-          '<table style="margin-bottom:12px"><thead><tr><th>VETS %</th><th>REPS %</th></tr></thead>'+
-          '<tbody><tr><td>'+c.vetPct+'%</td><td>'+c.repPct+'%</td></tr></tbody></table>'+
+          '<table style="margin-bottom:12px"><thead><tr><th>VETS %</th><th>REPS %</th><th>MARGIN %</th></tr></thead>'+
+          '<tbody><tr><td>'+c.vetPct+'%</td><td>'+c.repPct+'%</td><td>'+ (c.afterHouse>0 ? ( (c.afterFees/c.afterHouse)*100 ).toFixed(1) : '0.0') +'%</td></tr></tbody></table>'+
 
-          vetsBlock + repsBlock + raBlock +
+          peopleBlock('VETS', c.perVet, vetNames) +
+          peopleBlock('REPS', c.perRep, repNames) +
+          peopleBlock('RIDE ALONGS', c.perRA, raNames) +
         '</div>'
       );
     }
 
+    /* ===== REPORT PRINT (unchanged, totals by person) ===== */
     function buildReport(rows){
       const fileRows = rows.map((row,i)=>{
         const c = compute(row);
@@ -241,11 +229,11 @@
           '<h2>TOTAL BY PERSON (ALL FILES)</h2>'+
           '<table><thead><tr><th>Person</th><th>Amount</th></tr></thead>'+
             '<tbody>'+peopleRows+'</tbody></table>'+
-        '</div>'
+        </div>'
       );
     }
 
-    // ---------- UI primitives ----------
+    /* ===== UI primitives ===== */
     const Label = (t)=>h('label',{className:'text-xs font-bold text-black block mb-1 uppercase tracking-wide'},t);
     const Input = (props)=>h('input', Object.assign({
       className:'w-full px-2 py-1 border-2 border-black rounded focus:outline-none'
@@ -281,7 +269,7 @@
       ]);
     }
 
-    // ---------- Calculator card ----------
+    /* ===== Calculator card ===== */
     function CalcCard({row,index,rows,setRows,onPrint}) {
       const c = useMemo(()=>compute(row), [row]);
 
@@ -290,7 +278,6 @@
           const x=[...a], r={...x[index]};
           if (k==='contractAmount') {
             r.contractAmount = onlyNum(v);
-            // auto house % when user hasn't set a custom value
             if (!r.houseFeePercent || r.houseFeePercent === String(defaultHousePct(row.contractAmount))) {
               r.houseFeePercent = String(defaultHousePct(r.contractAmount));
             }
@@ -420,7 +407,7 @@
 
       const [rows, setRows] = useState([blank()]);
 
-      const printOne   = (i)=> openPrint(buildSingle(rows[i], i), 'Calculator #'+(i+1));
+      const printOne   = (i)=> openPrint(buildSingle(rows[i], i), 'Calculator '+(i+1));
       const printReport= ()=> openPrint(buildReport(rows), 'Payout Report');
 
       return h('div',{className:'max-w-6xl mx-auto p-4'},[
