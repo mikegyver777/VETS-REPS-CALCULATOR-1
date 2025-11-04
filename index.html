@@ -8,18 +8,27 @@
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- React (UMD, no Babel) -->
+  <!-- React (UMD) -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
   <style>
     html { -webkit-text-size-adjust: 100%; }
     * { -webkit-tap-highlight-color: transparent; }
-    input, button { font-size: 16px; }
+    input, button { font-size: 16px; } /* iOS focus fix */
 
-    .pill{border-width:2px;border-radius:10px;padding:8px 12px;display:flex;justify-content:space-between;gap:12px;background:#fff}
+    .pill{border-width:2px;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;gap:12px;background:#fff}
     .pill-purple{border-color:#7c3aed}.pill-purple .amt{color:#7c3aed;font-weight:800}
     .pill-red{border-color:#ef4444}.pill-red .amt{color:#ef4444;font-weight:800}
+
+    .role-header{display:flex;align-items:center;gap:8px;font-weight:800;text-transform:uppercase}
+    .role-vet{color:#065f46}     /* green-800 */
+    .role-rep{color:#4c1d95}     /* purple-900 */
+    .role-ra {color:#7f1d1d}     /* red-900  */
+    .role-band{height:6px;border-radius:9999px;margin:8px 0}
+    .band-vet{background:#10b981}   /* emerald-500 */
+    .band-rep{background:#a78bfa}   /* violet-300 */
+    .band-ra {background:#f87171}   /* red-400 */
 
     @media print{
       @page { size: legal; margin: 0.5in; }
@@ -135,7 +144,7 @@
       setTimeout(()=>{ w.focus(); w.print(); }, 80);
     }
 
-    /* ===== INDIVIDUAL PRINT (header removed, top padding added) ===== */
+    /* -------- Individual print (no big title; top padding) -------- */
     function buildSingle(row, idx){
       const c = compute(row);
       const vetNames = fit(row.vetNames, row.numVets);
@@ -151,7 +160,6 @@
 
       return (
         '<div class="print-page top-pad">'+
-          /* Customer + Job row (no big title) */
           '<table style="margin-bottom:8px"><tbody>'+
             '<tr><th>Customer</th><td>'+ (String(row.customerName||'').trim()||'N/A') +'</td></tr>'+
             '<tr><th>Job#</th><td>'+ (String(row.jobNumber||'').trim()||'N/A') +'</td></tr>'+
@@ -179,7 +187,7 @@
       );
     }
 
-    /* ===== REPORT PRINT (unchanged, totals by person) ===== */
+    /* -------- Report print (with per-person totals) -------- */
     function buildReport(rows){
       const fileRows = rows.map((row,i)=>{
         const c = compute(row);
@@ -233,35 +241,56 @@
       );
     }
 
-    /* ===== UI primitives ===== */
+    /* -------- UI primitives -------- */
     const Label = (t)=>h('label',{className:'text-xs font-bold text-black block mb-1 uppercase tracking-wide'},t);
     const Input = (props)=>h('input', Object.assign({
-      className:'w-full px-2 py-1 border-2 border-black rounded focus:outline-none'
+      className:'w-full px-2 py-2 border-2 border-black rounded focus:outline-none'
     }, props));
     const MoneyInput = ({label,value,onChange}) => h('div',{},[
       Label(label),
-      h('div',{className:'flex items-center bg-white border-2 border-black rounded px-2 py-1'},[
+      h('div',{className:'flex items-center bg-white border-2 border-black rounded px-2 py-2'},[
         h('span',{className:'mr-1'},'$'),
         Input({type:'text', inputMode:'decimal', value:value||'', onChange:(e)=>onChange(onlyNum(e.target.value)), style:{textAlign:'right'}})
       ])
     ]);
     const PercentInput = ({label,value,onChange}) => h('div',{},[
       Label(label),
-      h('div',{className:'flex items-center bg-white border-2 border-black rounded px-2 py-1'},[
+      h('div',{className:'flex items-center bg-white border-2 border-black rounded px-2 py-2'},[
         Input({type:'text', inputMode:'decimal', value:value||'', onChange:(e)=>onChange(onlyNum(e.target.value)), style:{textAlign:'right'}}),
         h('span',{className:'ml-2'},'%')
       ])
     ]);
-    function NamesWithPills({kind, count, names, per, color, onSet}) {
+
+    function NamesWithPills({role, count, names, per, onSet}) {
       if (num(count)<=0) return null;
+
+      const roleMeta = {
+        vet: { icon:'🛡️', title:'VETS — Enter Vet Names', header:'role-vet', band:'band-vet', placeholder:'Vet Name #' },
+        rep: { icon:'📣', title:'REPS — Enter Rep Names', header:'role-rep', band:'band-rep', placeholder:'Rep Name #' },
+        ra : { icon:'🚗', title:'RIDE-ALONGS — Enter Ride-Along Names', header:'role-ra', band:'band-ra', placeholder:'Ride-Along Name #' },
+      }[role];
+
       return h('div',{},[
-        h('div',{className:'text-xs font-bold mb-1 uppercase'}, kind.toUpperCase()),
-        ...fit(names,count).map((name,i)=>h('div',{key:i, className:'pill '+(color==='red'?'pill-red':'pill-purple')+' mb-2'},[
-          Input({type:'text', value:name||'', onChange:(e)=>onSet(i, e.target.value), className:'flex-1 px-2 py-1 border-0 outline-none'}),
+        h('div',{className:`role-header ${roleMeta.header}`},[
+          h('span',{},roleMeta.icon),
+          h('span',{},roleMeta.title)
+        ]),
+        h('div',{className:`role-band ${roleMeta.band}`}),
+        h('div',{className:'text-[12px] text-gray-700 mb-2'},
+          `Creates ${count} name field${num(count)>1?'s':''} below. Type each ${role==='ra'?'ride-along':'person'}’s name.`),
+        ...fit(names,count).map((name,i)=>h('div',{key:i, className:'pill '+(role==='ra'?'pill-red':'pill-purple')+' mb-2'},[
+          Input({
+            type:'text',
+            value:name||'',
+            placeholder:`${roleMeta.placeholder}${i+1}`,
+            onChange:(e)=>onSet(i, e.target.value),
+            className:'flex-1 px-2 py-1 border-0 outline-none'
+          }),
           h('div',{className:'amt'}, fmt(per))
         ]))
       ]);
     }
+
     function CardTotal({label, value}) {
       return h('div',{className:'text-center border-2 border-black rounded py-3 bg-white'},[
         h('div',{className:'text-xs font-bold mb-1 uppercase'},label),
@@ -269,7 +298,7 @@
       ]);
     }
 
-    /* ===== Calculator card ===== */
+    /* -------- Calculator card -------- */
     function CalcCard({row,index,rows,setRows,onPrint}) {
       const c = useMemo(()=>compute(row), [row]);
 
@@ -296,12 +325,11 @@
         });
       };
 
-      const setName = (key,i,val)=>{
+      const setName = (kind,i,val)=>{
         setRows(a=>{
           const x=[...a], r={...x[index]};
-          const map = {vet:'vetNames', rep:'repNames', ra:'rideAlongNames'};
-          const field = map[key];
-          r[field] = fit(r[field], key==='vet'?r.numVets:key==='rep'?r.numReps:r.numRideAlongs);
+          const field = kind==='vet'?'vetNames':kind==='rep'?'repNames':'rideAlongNames';
+          r[field] = fit(r[field], kind==='vet'?r.numVets:kind==='rep'?r.numReps:r.numRideAlongs);
           r[field][i] = val;
           x[index]=r; return x;
         });
@@ -363,29 +391,33 @@
           ])
         ]),
 
-        h('div',{className:'px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-6'},[
+        /* Role sections with very clear naming areas */
+        h('div',{className:'px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-8'},[
           h('div',{},[
             h('label',{className:'text-xs font-bold block mb-1 uppercase'},'Vets on Contract'),
             h('input',{type:'text', inputMode:'numeric', value:row.numVets||'', onChange:(e)=>upd('numVets', e.target.value),
-              className:'w-full px-2 py-1 border-2 border-black rounded'}),
+              className:'w-full px-2 py-1 border-2 border-black rounded', placeholder:'How many VETS?'}),
+            num(row.numVets)>0 ? h('div',{className:'mt-2 text-[12px] text-gray-700'} ,`Creates ${row.numVets} Vet name field(s) below.`) : null,
             num(row.numVets)>0 ? h('div',{className:'mt-3 text-sm font-bold text-center'} ,'Per Vet: '+fmt(c.perVet)) : null,
-            h(NamesWithPills,{kind:'vet', count:row.numVets, names:fit(row.vetNames,row.numVets), per:c.perVet, color:'purple',
+            h(NamesWithPills,{role:'vet', count:row.numVets, names:fit(row.vetNames,row.numVets), per:c.perVet,
               onSet:(i,val)=>setName('vet',i,val)})
           ]),
           h('div',{},[
             h('label',{className:'text-xs font-bold block mb-1 uppercase'},'Reps on Contract'),
             h('input',{type:'text', inputMode:'numeric', value:row.numReps||'', onChange:(e)=>upd('numReps', e.target.value),
-              className:'w-full px-2 py-1 border-2 border-black rounded'}),
+              className:'w-full px-2 py-1 border-2 border-black rounded', placeholder:'How many REPS?'}),
+            num(row.numReps)>0 ? h('div',{className:'mt-2 text-[12px] text-gray-700'} ,`Creates ${row.numReps} Rep name field(s) below.`) : null,
             num(row.numReps)>0 ? h('div',{className:'mt-3 text-sm font-bold text-center'} ,'Per Rep: '+fmt(c.perRep)) : null,
-            h(NamesWithPills,{kind:'rep', count:row.numReps, names:fit(row.repNames,row.numReps), per:c.perRep, color:'purple',
+            h(NamesWithPills,{role:'rep', count:row.numReps, names:fit(row.repNames,row.numReps), per:c.perRep,
               onSet:(i,val)=>setName('rep',i,val)})
           ]),
           h('div',{},[
-            h('label',{className:'text-xs font-bold block mb-1 uppercase'},'Ride Alongs'),
+            h('label',{className:'text-xs font-bold block mb-1 uppercase'},'Ride-Alongs'),
             h('input',{type:'text', inputMode:'numeric', value:row.numRideAlongs||'', onChange:(e)=>upd('numRideAlongs', e.target.value),
-              className:'w-full px-2 py-1 border-2 border-black rounded'}),
+              className:'w-full px-2 py-1 border-2 border-black rounded', placeholder:'How many RIDE-ALONGS?'}),
+            num(row.numRideAlongs)>0 ? h('div',{className:'mt-2 text-[12px] text-gray-700'} ,`Creates ${row.numRideAlongs} Ride-Along name field(s) below.`) : null,
             num(row.numRideAlongs)>0 ? h('div',{className:'mt-3 text-sm font-bold text-center'} ,'Per RA: '+fmt(c.perRA)) : null,
-            h(NamesWithPills,{kind:'ra', count:row.numRideAlongs, names:fit(row.rideAlongNames,row.numRideAlongs), per:c.perRA, color:'red',
+            h(NamesWithPills,{role:'ra', count:row.numRideAlongs, names:fit(row.rideAlongNames,row.numRideAlongs), per:c.perRA,
               onSet:(i,val)=>setName('ra',i,val)})
           ])
         ])
@@ -412,7 +444,7 @@
 
       return h('div',{className:'max-w-6xl mx-auto p-4'},[
         h('div',{className:'bg-white rounded-lg shadow-lg p-4 mb-4 border-4 border-blue-500'},[
-          h('div',{className:'flex items-center justify-between'},[
+          h('div',{className:'flex items-center justify-between flex-wrap gap-3'},[
             h('h1',{className:'text-xl font-bold text-blue-800'},'ALTA CAL PROFIT SHARE'),
             h('div',{className:'flex gap-2'},[
               h('button',{className:'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded', onClick:printReport},'Print Report'),
