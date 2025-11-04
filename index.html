@@ -49,32 +49,49 @@
     const pctFee = (amount, pct) => num(amount) * (num(pct)/100);
 
     function calcOne(d){
+      // House fee: unchanged logic
       const housePct = d.houseFeeManual
         ? num(d.houseFeePercent)
         : (d.houseFeePercent ? num(d.houseFeePercent) : defaultHousePct(d.contractAmount));
 
-      const contract = num(d.contractAmount);
-      const houseFee = contract * (housePct/100);
-      const dealerFeeAmt = pctFee(d.financeAmount, d.dealerFee);
+      const contract   = num(d.contractAmount);
+      const netAmount  = Math.min(num(d.netAmount)||0, contract||0); // clamp to contract
+      const houseFee   = contract * (housePct/100);
+
+      // >>> CHANGE: Dealer fee is Contract - Net Amount (independent of finance amount or entered dealer %)
+      const dealerFeeAmt = Math.max(contract - netAmount, 0);
+      const dealerPct    = contract > 0 ? (dealerFeeAmt / contract) * 100 : 0;
+
+      // Credit-card fee math remains as-is and is distributed per person (not subtracted from After Fees)
       const ccFeeAmt     = pctFee(d.creditCard, d.creditCardFee);
+
+      // "After House" basis for margin % denominator preserved
       const afterHouse   = contract - houseFee;
+
+      // After Fees = After House - Labor/Material - Dealer Fee (CC fee excluded from this line by design)
       const afterFees    = afterHouse - num(d.laborMaterial) - dealerFeeAmt;
 
+      // Tier thresholds are applied to margin % = AfterFees / AfterHouse
       const marginPct = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
+
+      // >>> Tier commission schedules (exactly as requested)
       let vetRate=25, repRate=20;
       if (marginPct>=50){ vetRate=55; repRate=40; }
       else if (marginPct>=40){ vetRate=45; repRate=30; }
       else if (marginPct>=33){ vetRate=35; repRate=25; }
 
       const vets=num(d.numVets), reps=num(d.numReps), people=vets+reps;
-      const vetPool = afterFees*(vetRate/100);
-      const repPool = afterFees*(repRate/100);
+
+      const vetPool = Math.max(afterFees,0)*(vetRate/100);
+      const repPool = Math.max(afterFees,0)*(repRate/100);
+
       const perVet  = people>0 ? vetPool/people : 0;
       const perRep  = people>0 ? repPool/people : 0;
 
       const rideAlongFee   = num(d.rideAlong);
       const rideAlongBonus = num(d.rideAlongBonus);
       const rideAlongTotal = rideAlongFee + rideAlongBonus;
+
       const rideAlongPer   = people>0 ? rideAlongFee/people : 0;
       const ccPer          = people>0 ? ccFeeAmt/people : 0;
 
@@ -88,10 +105,11 @@
 
       return {
         contract, housePct, houseFee,
-        finance:num(d.financeAmount), dealerPct:num(d.dealerFee), dealerFeeAmt,
+        netAmount,
+        dealerPct, dealerFeeAmt,
         credit:num(d.creditCard), ccPct:num(d.creditCardFee), ccFeeAmt,
         labor:num(d.laborMaterial),
-        afterFees, marginPct, vetRate, repRate,
+        afterHouse, afterFees, marginPct, vetRate, repRate,
         perVet:netPerVet, perRep:netPerRep, totalVets, totalReps,
         perRA, rideAlongTotal,
         combined: totalVets + totalReps
@@ -134,7 +152,6 @@
         </style>
       </head><body>${html}</body></html>`);
       win.document.close();
-      // Ensure print after paint (prevents blank pages)
       setTimeout(()=>{ win.focus(); win.print(); }, 50);
     }
 
@@ -166,10 +183,13 @@
             <div class="grid2">
               <div><b>Contract:</b> ${fmt(c.contract)}</div>
               <div><b>House Fee %:</b> ${c.housePct||0}% (Amt: ${fmt(c.houseFee)})</div>
-              <div><b>Finance Amount:</b> ${fmt(c.finance)}</div>
-              <div><b>Dealer Fee %:</b> ${c.dealerPct||0}% (Amt: ${fmt(c.dealerFeeAmt)})</div>
+
+              <div><b>Net Amount:</b> ${fmt(c.netAmount)}</div>
+              <div><b>Dealer Fee:</b> ${fmt(c.dealerFeeAmt)} (${(c.dealerPct||0).toFixed(2)}%)</div>
+
               <div><b>Credit Card:</b> ${fmt(c.credit)}</div>
-              <div><b>CC Fee %:</b> ${c.ccPct||0}% (Amt: ${fmt(c.ccFeeAmt)})</div>
+              <div><b>CC Fee %:</b> ${row.creditCardFee||0}% (Amt: ${fmt(c.ccFeeAmt)})</div>
+
               <div><b>Labor & Material:</b> ${fmt(c.labor)}</div>
               <div class="right"><b>Total After Fees:</b> ${fmt(c.afterFees)}</div>
             </div>
@@ -198,7 +218,6 @@
     }
 
     function buildReportHTML(rows){
-      // aggregate per person across all files
       const add = (map,name,amt)=>{ const k=(name||'').trim()||'(Unnamed)'; map.set(k,(map.get(k)||0)+(amt||0)); };
       const rollup = { vets:new Map(), reps:new Map(), ras:new Map() };
 
@@ -332,8 +351,10 @@
       const blank = () => ({
         id: Date.now()+Math.random(),
         customerName:'', jobNumber:'',
-        contractAmount:'', cashCheck:'',
-        financeAmount:'', dealerFee:'',
+        contractAmount:'', netAmount:'',      // <<< new field for net amount
+        cashCheck:'',
+        financeAmount:'',                      // kept for record; not used in dealer math now
+        dealerFee:'',                          // kept for UI compatibility; not used in dealer math now
         creditCard:'', creditCardFee:'',
         houseFeePercent:'', houseFeeManual:false,
         laborMaterial:'',
@@ -352,6 +373,11 @@
             if(!row.houseFeeManual){
               row.houseFeePercent = String(defaultHousePct(row.contractAmount));
             }
+            // optional: clamp net to contract if user already typed net higher than contract
+            if (num(row.netAmount) > num(row.contractAmount)) row.netAmount = row.contractAmount;
+          } else if(key==='netAmount'){
+            row.netAmount = onlyNum(val);
+            if (num(row.netAmount) > num(row.contractAmount)) row.netAmount = row.contractAmount;
           } else if(key==='houseFeePercent'){
             row.houseFeePercent = onlyNum(val);
             row.houseFeeManual = true;
@@ -417,28 +443,29 @@
                 <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                   <Money label="CONTRACT AMOUNT" value={row.contractAmount}
                          onChange={v=>upd(idx,'contractAmount',v)} onBlur={()=>upd(idx,'contractAmount',row.contractAmount)}/>
-                  <Money label="CASH/CHECK" value={row.cashCheck} onChange={v=>upd(idx,'cashCheck',onlyNum(v))}/>
+                  <Money label="NET AMOUNT (AFTER DEALER FEE)" value={row.netAmount}
+                         onChange={v=>upd(idx,'netAmount',onlyNum(v))}/>
                   <Money label="LABOR & MATERIAL" value={row.laborMaterial} onChange={v=>upd(idx,'laborMaterial',onlyNum(v))}/>
                 </div>
 
                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="border-2 rounded p-3">
-                    <Money label="FINANCE AMOUNT" value={row.financeAmount} onChange={v=>upd(idx,'financeAmount',onlyNum(v))}/>
-                    <Pct label="DEALER FEE (%)" value={row.dealerFee} onChange={v=>upd(idx,'dealerFee',onlyNum(v))}/>
-                    <div className="text-sm text-center font-bold mt-1">{fmt(pctFee(row.financeAmount,row.dealerFee))}</div>
-                  </div>
-                  <div className="border-2 rounded p-3">
                     <Money label="CREDIT CARD" value={row.creditCard} onChange={v=>upd(idx,'creditCard',onlyNum(v))}/>
                     <Pct label="CC FEE (%)" value={row.creditCardFee} onChange={v=>upd(idx,'creditCardFee',onlyNum(v))}/>
                     <div className="text-sm text-center font-bold mt-1">{fmt(pctFee(row.creditCard,row.creditCardFee))}</div>
+                  </div>
+                  <div className="border-2 rounded p-3">
+                    <Pct label="HOUSE FEE (%)" value={row.houseFeePercent} onChange={v=>upd(idx,'houseFeePercent',v)}/>
+                    <div className="text-center text-lg font-bold mt-1">House: {fmt(c.houseFee)}</div>
+                    <div className="text-xs text-center text-gray-600 mt-1">Auto: 10% ≤ $20k; 9% $20k–$30k; 8% ≥ $30k</div>
                   </div>
                 </div>
 
                 <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="border-2 rounded p-3">
-                    <Pct label="HOUSE FEE (%)" value={row.houseFeePercent} onChange={v=>upd(idx,'houseFeePercent',v)}/>
-                    <div className="text-center text-lg font-bold mt-1">House: {fmt(c.houseFee)}</div>
-                    <div className="text-xs text-center text-gray-600 mt-1">Auto: 10% ≤ $20k; 9% $20k–$30k; 8% ≥ $30k</div>
+                    <div className="text-xs font-bold mb-1">DEALER FEE (Derived)</div>
+                    <div className="text-sm">Amt = Contract − Net</div>
+                    <div className="text-center text-lg font-bold mt-1">{fmt(c.dealerFeeAmt)} ({(c.dealerPct||0).toFixed(2)}%)</div>
                   </div>
                   <div className="border-2 rounded p-3">
                     <Money label="RIDE ALONG FEE" value={row.rideAlong} onChange={v=>upd(idx,'rideAlong',onlyNum(v))}/>
@@ -449,7 +476,7 @@
                   <Money label="RIDE ALONG BONUS" value={row.rideAlongBonus} onChange={v=>upd(idx,'rideAlongBonus',onlyNum(v))}/>
                 </div>
 
-                <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 grid grid-cols-1 md-grid-cols-3 md:grid-cols-3 gap-4">
                   <Stat title="TOTAL AFTER FEES" value={fmt(c.afterFees)}/>
                   <Stat title="VETS %" value={`${c.vetRate}%`}/>
                   <Stat title="REPS %" value={`${c.repRate}%`}/>
