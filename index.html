@@ -8,136 +8,119 @@
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- React + ReactDOM UMD (compatible with iPhone/iPad Safari) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- React UMD (prod) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 
-  <!-- Babel (compile JSX on GitHub Pages) -->
+  <!-- Babel (compile JSX on static hosting/GitHub Pages) -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
-    html{ -webkit-text-size-adjust:100% }
-    *{ -webkit-tap-highlight-color:transparent }
-    input,button{ font-size:16px } /* iOS cursor/zoom quirk */
-
-    .pill{border:2px solid #7c3aed;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;gap:12px;background:#fff}
-    .pill .amt{color:#7c3aed;font-weight:800}
-    .pill.ra{border-color:#ef4444}
-    .pill.ra .amt{color:#ef4444}
-
+    html{-webkit-text-size-adjust:100%}
+    input,button{font-size:16px} /* iOS zoom fix */
     @media print{
-      @page{ size:legal; margin:0.5in }
-      body{ print-color-adjust:exact; -webkit-print-color-adjust:exact }
+      @page{ size: legal; margin: 0.5in }
+      body{ print-color-adjust: exact; -webkit-print-color-adjust: exact }
       .no-print{ display:none !important }
     }
-
-    /* non-fatal visible error banner if something breaks */
-    #boot-error{display:none;position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#fee2e2;color:#991b1b;border-top:3px solid #ef4444;padding:10px 14px;font:600 14px/1.3 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    /* Visible banner if something breaks (prevents "blank page") */
+    #err{display:none;position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#fee2e2;color:#991b1b;border-top:3px solid #ef4444;padding:8px 12px;font:600 13px/1.3 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    .pill{border:2px solid #7c3aed;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;gap:12px;background:#fff}
+    .pill .amt{color:#7c3aed;font-weight:800}
+    .pill.ra{border-color:#ef4444}.pill.ra .amt{color:#ef4444}
+    .role-title{font-weight:900;text-transform:uppercase;display:flex;gap:8px;align-items:center}
   </style>
 </head>
 <body class="bg-gray-100">
-  <div id="root" class="p-3 text-sm text-gray-600">Loading… (If this message stays, JavaScript failed to run.)</div>
-  <div id="boot-error"></div>
+  <div id="root" class="p-3 text-sm text-gray-600">Loading…</div>
+  <div id="err"></div>
 
   <script type="text/babel" data-presets="env,react">
-    // ===== tiny error surface so "blank page" never happens silently
-    const showBootError = (msg) => {
-      const el = document.getElementById('boot-error');
-      el.textContent = 'App error: ' + msg;
-      el.style.display = 'block';
-    };
-    window.addEventListener('error', e => showBootError(e.message || 'Unknown error'));
-    window.addEventListener('unhandledrejection', e => showBootError((e.reason && e.reason.message) || 'Unhandled promise'));
+    /* ===== never-silent errors ===== */
+    const showErr = (m)=>{const e=document.getElementById('err');e.textContent='App error: '+m; e.style.display='block';};
+    window.addEventListener('error',e=>showErr(e.message||'Unknown error'));
+    window.addEventListener('unhandledrejection',e=>showErr((e.reason&&e.reason.message)||'Unhandled promise'));
 
-    const { useState, useMemo } = React;
+    const {useState,useMemo} = React;
 
-    // ---------- Helpers ----------
-    const num = v => {
-      const x = parseFloat(String(v ?? '').replace(/[,$]/g,''));
-      return Number.isFinite(x) ? x : 0;
-    };
+    /* ===== helpers ===== */
     const onlyNum = s => String(s||'').replace(/[^0-9.]/g,'');
     const onlyInt = s => String(s||'').replace(/[^0-9]/g,'');
+    const num = v => { const x=parseFloat(String(v??'').replace(/[,$]/g,'')); return Number.isFinite(x)?x:0; };
     const fmt = v => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(v)||0);
 
-    const defaultHousePct = (contractAmount) => {
+    const defaultHousePct = (contractAmount)=>{
       const a = num(contractAmount);
       if (a <= 20000) return 10;
       if (a <= 30000) return 9;
       return 8;
     };
 
-    const fit = (arr, count) => {
-      const c = Math.max(0, parseInt(count||0,10)||0);
-      const base = Array.isArray(arr) ? [...arr] : [];
-      if (base.length > c) return base.slice(0,c);
-      while (base.length < c) base.push('');
+    const fit = (arr, count)=>{
+      const c=Math.max(0, parseInt(count||0,10)||0);
+      const base=Array.isArray(arr)?[...arr]:[];
+      if (base.length>c) return base.slice(0,c);
+      while(base.length<c) base.push('');
       return base;
     };
 
-    function tierRates(afterFees, afterHouse){
-      const margin = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
-      let vet=25, rep=20;
-      if (margin>=50){ vet=55; rep=40; }
-      else if (margin>=40){ vet=45; rep=30; }
-      else if (margin>=33){ vet=35; rep=25; }
-      return { vetPct:vet, repPct:rep, margin };
-    }
-
     function compute(row){
-      const contract = num(row.contractAmount);
+      const contract=num(row.contractAmount);
       const housePct = row.houseFeePercent ? num(row.houseFeePercent) : defaultHousePct(contract);
       const houseFee = contract * housePct/100;
 
-      const finance = num(row.financeAmount);
-      const dealerPct = num(row.dealerFee);
-      const dealerFeeAmt = finance * dealerPct/100;
+      const finance=num(row.financeAmount);
+      const dealerPct=num(row.dealerFee);
+      const dealerFeeAmt=finance*dealerPct/100;
 
-      const credit = num(row.creditCard);
-      const ccPct = num(row.creditCardFee);
-      const ccFeeAmt = credit * ccPct/100;
+      const credit=num(row.creditCard);
+      const ccPct=num(row.creditCardFee);
+      const ccFeeAmt=credit*ccPct/100;
 
-      const labor = num(row.laborMaterial);
+      const labor=num(row.laborMaterial);
 
-      const afterHouse = contract - houseFee;
-      const afterFees  = afterHouse - labor - dealerFeeAmt;
+      const afterHouse=contract-houseFee;
+      const afterFees = afterHouse - labor - dealerFeeAmt;
 
-      const { vetPct, repPct, margin } = tierRates(afterFees, afterHouse);
+      // tiers by margin %
+      const margin = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
+      let vetPct=25, repPct=20;
+      if (margin>=50){ vetPct=55; repPct=40; }
+      else if (margin>=40){ vetPct=45; repPct=30; }
+      else if (margin>=33){ vetPct=35; repPct=25; }
 
-      const vets = num(row.numVets), reps = num(row.numReps), people = vets+reps || 0;
+      const vets=num(row.numVets), reps=num(row.numReps);
+      const people=vets+reps || 0;
+      const vetPool=afterFees*vetPct/100;
+      const repPool=afterFees*repPct/100;
 
-      const vetPool = afterFees * vetPct/100;
-      const repPool = afterFees * repPct/100;
+      const perVetBase=people?(vetPool/people):0;
+      const perRepBase=people?(repPool/people):0;
 
-      const perVetBase = people ? (vetPool/people) : 0;
-      const perRepBase = people ? (repPool/people) : 0;
-
-      const rideAlongFee = num(row.rideAlong);
-      const rideAlongBonus = num(row.rideAlongBonus);
-      const rideAlongTotal = rideAlongFee + rideAlongBonus;
+      const rideAlongFee=num(row.rideAlong);
+      const rideAlongBonus=num(row.rideAlongBonus);
+      const rideAlongTotal=rideAlongFee+rideAlongBonus;
 
       const rideAlongPerPerson = people ? (rideAlongFee/people) : 0;
-      const ccPerPerson = people ? (ccFeeAmt/people) : 0;
+      const ccPerPerson        = people ? (ccFeeAmt/people) : 0;
 
       const perVet = perVetBase - rideAlongPerPerson - ccPerPerson;
       const perRep = perRepBase - rideAlongPerPerson - ccPerPerson;
-
       const perRA  = num(row.numRideAlongs) ? (rideAlongTotal/num(row.numRideAlongs)) : 0;
 
       return {
-        contract, housePct, houseFee, finance, dealerPct, dealerFeeAmt,
-        credit, ccPct, ccFeeAmt, labor, afterFees, afterHouse,
-        vetPct, repPct, margin, perVet, perRep, perRA, rideAlongTotal
+        contract, finance, credit, labor,
+        housePct, houseFee, dealerPct, dealerFeeAmt, ccPct, ccFeeAmt,
+        afterFees, afterHouse, margin, vetPct, repPct, perVet, perRep, perRA, rideAlongTotal
       };
     }
 
-    // ---------- Print windows (legal size, readable, no blank pages) ----------
+    /* ===== print (clean page, no hidden content) ===== */
     function openPrint(html,title){
       const w = window.open('', '_blank');
       if(!w){ alert('Pop-up blocked. Allow pop-ups to print.'); return; }
       w.document.open();
-      w.document.write(`<!doctype html>
-<html><head><meta charset="utf-8"><title>${title}</title>
+      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
 <style>
 @page{size:legal;margin:0.5in}
 body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;print-color-adjust:exact;-webkit-print-color-adjust:exact}
@@ -153,13 +136,13 @@ th,td{border:1px solid #000;padding:6px 8px;font-size:14px}
       setTimeout(()=>{ try{w.focus(); w.print();}catch(e){} }, 80);
     }
 
-    function buildSingle(row, idx){
-      const c = compute(row);
-      const vetNames = fit(row.vetNames, row.numVets);
-      const repNames = fit(row.repNames, row.numReps);
-      const raNames  = fit(row.rideAlongNames, row.numRideAlongs);
+    function singlePrintHTML(row, idx){
+      const c=compute(row);
+      const vets=fit(row.vetNames,row.numVets);
+      const reps=fit(row.repNames,row.numReps);
+      const ras =fit(row.rideAlongNames,row.numRideAlongs);
 
-      const block = (title, per, list) => list.length ? `
+      const block=(title,per,list)=> list.length ? `
         <h2>${title} (Per: ${fmt(per)})</h2>
         <table><thead><tr><th>Name</th><th>Payout</th></tr></thead>
         <tbody>${list.map(n=>`<tr><td>${(n||'').toString().trim()}</td><td class="right">${fmt(per)}</td></tr>`).join('')}</tbody></table>
@@ -193,17 +176,17 @@ th,td{border:1px solid #000;padding:6px 8px;font-size:14px}
             <tbody><tr><td>${c.vetPct}%</td><td>${c.repPct}%</td><td>${c.afterHouse>0?((c.afterFees/c.afterHouse)*100).toFixed(1):'0.0'}%</td></tr></tbody>
           </table>
 
-          ${block('VETS', c.perVet, vetNames)}
-          ${block('REPS', c.perRep, repNames)}
-          ${block('RIDE ALONGS', c.perRA, raNames)}
+          ${block('VETS', c.perVet, vets)}
+          ${block('REPS', c.perRep, reps)}
+          ${block('RIDE ALONGS', c.perRA, ras)}
         </div>
       `;
     }
 
-    function buildReport(rows){
+    function reportPrintHTML(rows){
       const fileRows = rows.map((row,i)=>{
-        const c = compute(row);
-        const v = num(row.numVets), r = num(row.numReps), ra = num(row.numRideAlongs);
+        const c=compute(row);
+        const v=num(row.numVets), r=num(row.numReps), ra=num(row.numRideAlongs);
         return `<tr>
           <td>${i+1}</td>
           <td>${(row.customerName||'').toString().trim()||'N/A'}</td>
@@ -220,16 +203,14 @@ th,td{border:1px solid #000;padding:6px 8px;font-size:14px}
         </tr>`;
       }).join('');
 
-      const totals = {};
-      const add = (name, amt) => {
-        const key = (name||'').toString().trim() || '(Unnamed)';
-        totals[key] = (totals[key]||0) + (amt||0);
-      };
+      // Totals by person across all files
+      const totals={};
+      const add=(name,amt)=>{const k=(name||'').toString().trim()||'(Unnamed)'; totals[k]=(totals[k]||0)+(amt||0);};
       rows.forEach(row=>{
-        const c = compute(row);
-        fit(row.vetNames,row.numVets).forEach(nm=>add(nm,c.perVet));
-        fit(row.repNames,row.numReps).forEach(nm=>add(nm,c.perRep));
-        fit(row.rideAlongNames,row.numRideAlongs).forEach(nm=>add(nm,c.perRA));
+        const c=compute(row);
+        fit(row.vetNames,row.numVets).forEach(n=>add(n,c.perVet));
+        fit(row.repNames,row.numReps).forEach(n=>add(n,c.perRep));
+        fit(row.rideAlongNames,row.numRideAlongs).forEach(n=>add(n,c.perRA));
       });
       const peopleRows = Object.entries(totals)
         .sort((a,b)=>a[0].localeCompare(b[0]))
@@ -256,56 +237,55 @@ th,td{border:1px solid #000;padding:6px 8px;font-size:14px}
       `;
     }
 
-    // ---------- UI Bits ----------
-    const Label = (t)=><label className="text-xs font-bold text-black block mb-1 uppercase tracking-wide">{t}</label>;
-    const Input = (props)=><input {...props} className={`w-full px-2 py-2 border-2 border-black rounded focus:outline-none ${props.className||''}`}/>;
-    const MoneyInput = ({label,value,onChange}) => (
-      <div>
-        <Label>{label}</Label>
+    /* ===== small UI atoms ===== */
+    const Label = ({children}) => <label className="text-xs font-bold block mb-1 uppercase">{children}</label>;
+    const Text = (p) => <input {...p} className={"w-full px-2 py-1 border-2 border-black rounded "+(p.className||'')} />;
+
+    const MoneyInput = ({label,value,onChange})=>(
+      <div><Label>{label}</Label>
         <div className="flex items-center bg-white border-2 border-black rounded px-2 py-2">
           <span className="mr-1">$</span>
-          <Input type="text" inputMode="decimal" value={value||''} onChange={e=>onChange(onlyNum(e.target.value))} style={{textAlign:'right'}}/>
+          <Text type="text" inputMode="decimal" value={value||''} onChange={e=>onChange(onlyNum(e.target.value))} style={{textAlign:'right'}}/>
         </div>
       </div>
     );
-    const PercentInput = ({label,value,onChange}) => (
-      <div>
-        <Label>{label}</Label>
+    const PercentInput = ({label,value,onChange})=>(
+      <div><Label>{label}</Label>
         <div className="flex items-center bg-white border-2 border-black rounded px-2 py-2">
-          <Input type="text" inputMode="decimal" value={value||''} onChange={e=>onChange(onlyNum(e.target.value))} style={{textAlign:'right'}}/>
+          <Text type="text" inputMode="decimal" value={value||''} onChange={e=>onChange(onlyNum(e.target.value))} style={{textAlign:'right'}}/>
           <span className="ml-2">%</span>
         </div>
       </div>
     );
-    const CardTotal = ({label, value}) => (
+    const Card = ({label,value})=>(
       <div className="text-center border-2 border-black rounded py-3 bg-white">
         <div className="text-xs font-bold mb-1 uppercase">{label}</div>
         <div className="text-2xl font-bold">{value}</div>
       </div>
     );
 
-    function NamesWithPills({role, count, names, per, onSet}) {
+    function NamesWithPills({role,count,names,per,onSet}){
       if (num(count)<=0) return null;
-      const roleMeta = {
-        vet: { icon:'🛡️', title:'VETS — Enter Vet Names', placeholder:'Vet Name #' },
-        rep: { icon:'📣', title:'REPS — Enter Rep Names', placeholder:'Rep Name #' },
-        ra : { icon:'🚗', title:'RIDE-ALONGS — Enter Ride-Along Names', placeholder:'Ride-Along Name #' },
+      const meta = {
+        vet:{icon:'🛡️',title:'VETS — Enter Vet Names',ph:'Vet Name #'},
+        rep:{icon:'📣',title:'REPS — Enter Rep Names',ph:'Rep Name #'},
+        ra :{icon:'🚗',title:'RIDE-ALONGS — Enter Ride-Along Names',ph:'Ride-Along Name #'},
       }[role];
-
+      const colorBar = role==='vet'?'bg-emerald-500':role==='rep'?'bg-violet-300':'bg-red-400';
+      const pillCls  = role==='ra'?'pill ra':'pill';
       return (
         <div>
-          <div className={`flex items-center gap-2 font-extrabold uppercase ${role==='vet'?'text-emerald-800':role==='rep'?'text-violet-900':'text-red-900'}`}>
-            <span>{roleMeta.icon}</span><span>{roleMeta.title}</span>
+          <div className={"role-title "+(role==='vet'?'text-emerald-900':role==='rep'?'text-violet-900':'text-red-900')}>
+            <span>{meta.icon}</span><span>{meta.title}</span>
           </div>
-          <div className={`h-1.5 my-2 rounded-full ${role==='vet'?'bg-emerald-500':role==='rep'?'bg-violet-300':'bg-red-400'}`}></div>
-          <div className="text-[12px] text-gray-700 mb-2">Creates {count} name field{num(count)>1?'s':''} below.</div>
-          {fit(names,count).map((name,i)=>(
-            <div key={i} className={`pill ${role==='ra'?'ra':''} mb-2`}>
+          <div className={"h-1.5 my-2 rounded-full "+colorBar}></div>
+          {Array.from({length:num(count)}).map((_,i)=>(
+            <div className={pillCls} key={i}>
               <input
                 type="text"
-                value={name||''}
-                placeholder={`${roleMeta.placeholder}${i+1}`}
-                onChange={e=>onSet(i, e.target.value)}
+                value={(names&&names[i])||''}
+                placeholder={meta.ph+(i+1)}
+                onChange={e=>onSet(i,e.target.value)}
                 className="flex-1 px-2 py-1 border-0 outline-none"
               />
               <div className="amt">{fmt(per)}</div>
@@ -315,38 +295,32 @@ th,td{border:1px solid #000;padding:6px 8px;font-size:14px}
       );
     }
 
-    function CalcCard({row,index,rows,setRows,onPrint}) {
+    function CalcCard({row,index,rows,setRows,onPrint}){
       const c = useMemo(()=>compute(row), [row]);
-
-      const upd = (k,v)=>{
+      const upd=(k,v)=>{
         setRows(a=>{
           const x=[...a], r={...x[index]};
-          if (k==='contractAmount') {
-            r.contractAmount = onlyNum(v);
-            if (!r.houseFeePercent || r.houseFeePercent === String(defaultHousePct(row.contractAmount))) {
-              r.houseFeePercent = String(defaultHousePct(r.contractAmount));
-            }
-          } else if (k==='houseFeePercent') {
-            r.houseFeePercent = onlyNum(v);
-          } else if (k==='numVets') {
-            r.numVets = onlyInt(v); r.vetNames = fit(r.vetNames, r.numVets);
-          } else if (k==='numReps') {
-            r.numReps = onlyInt(v); r.repNames = fit(r.repNames, r.numReps);
-          } else if (k==='numRideAlongs') {
-            r.numRideAlongs = onlyInt(v); r.rideAlongNames = fit(r.rideAlongNames, r.numRideAlongs);
-          } else {
-            r[k]=v;
-          }
+          if (k==='contractAmount'){
+            r.contractAmount=onlyNum(v);
+            if (!r.houseFeePercent){ r.houseFeePercent=String(defaultHousePct(r.contractAmount)); }
+          } else if (k==='houseFeePercent'){
+            r.houseFeePercent=onlyNum(v);
+          } else if (k==='numVets'){
+            r.numVets=onlyInt(v); r.vetNames=fit(r.vetNames,r.numVets);
+          } else if (k==='numReps'){
+            r.numReps=onlyInt(v); r.repNames=fit(r.repNames,r.numReps);
+          } else if (k==='numRideAlongs'){
+            r.numRideAlongs=onlyInt(v); r.rideAlongNames=fit(r.rideAlongNames,r.numRideAlongs);
+          } else { r[k]=v; }
           x[index]=r; return x;
         });
       };
-
-      const setName = (kind,i,val)=>{
+      const setName=(kind,i,val)=>{
         setRows(a=>{
           const x=[...a], r={...x[index]};
           const field = kind==='vet'?'vetNames':kind==='rep'?'repNames':'rideAlongNames';
-          r[field] = fit(r[field], kind==='vet'?r.numVets:kind==='rep'?r.numReps:r.numRideAlongs);
-          r[field][i] = val;
+          r[field]=fit(r[field], kind==='vet'?r.numVets:kind==='rep'?r.numReps:r.numRideAlongs);
+          r[field][i]=val;
           x[index]=r; return x;
         });
       };
@@ -361,35 +335,31 @@ th,td{border:1px solid #000;padding:6px 8px;font-size:14px}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 border-b-2 border-black">
             <div>
-              <label className="text-xs font-bold block mb-1 uppercase">Customer Name</label>
-              <input type="text" value={row.customerName||''}
-                     onChange={e=>upd('customerName', e.target.value)}
-                     className="w-full px-2 py-1 border-2 border-black rounded"/>
+              <Label>Customer Name</Label>
+              <Text type="text" value={row.customerName||''} onChange={e=>upd('customerName', e.target.value)}/>
             </div>
             <div>
-              <label className="text-xs font-bold block mb-1 uppercase">Job Number</label>
-              <input type="text" value={row.jobNumber||''}
-                     onChange={e=>upd('jobNumber', e.target.value)}
-                     className="w-full px-2 py-1 border-2 border-black rounded"/>
+              <Label>Job Number</Label>
+              <Text type="text" value={row.jobNumber||''} onChange={e=>upd('jobNumber', e.target.value)}/>
             </div>
           </div>
 
           <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <MoneyInput label="Contract Amount" value={row.contractAmount} onChange={v=>upd('contractAmount', v)} />
-                <MoneyInput label="Cash/Check" value={row.cashCheck} onChange={v=>upd('cashCheck', v)} />
-                <MoneyInput label="Labor & Material" value={row.laborMaterial} onChange={v=>upd('laborMaterial', v)} />
+                <MoneyInput label="Contract Amount" value={row.contractAmount} onChange={v=>upd('contractAmount',v)}/>
+                <MoneyInput label="Cash/Check" value={row.cashCheck} onChange={v=>upd('cashCheck',v)}/>
+                <MoneyInput label="Labor & Material" value={row.laborMaterial} onChange={v=>upd('laborMaterial',v)}/>
               </div>
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <MoneyInput label="Finance Amount" value={row.financeAmount} onChange={v=>upd('financeAmount', v)} />
-                  <PercentInput label="Dealer Fee (%)" value={row.dealerFee} onChange={v=>upd('dealerFee', v)} />
+                  <MoneyInput label="Finance Amount" value={row.financeAmount} onChange={v=>upd('financeAmount',v)}/>
+                  <PercentInput label="Dealer Fee (%)" value={row.dealerFee} onChange={v=>upd('dealerFee',v)}/>
                   <div className="text-center text-sm font-bold text-green-700 mt-1">{fmt(c.dealerFeeAmt)}</div>
                 </div>
                 <div>
-                  <MoneyInput label="Credit Card" value={row.creditCard} onChange={v=>upd('creditCard', v)} />
-                  <PercentInput label="CC Fee (%)" value={row.creditCardFee} onChange={v=>upd('creditCardFee', v)} />
+                  <MoneyInput label="Credit Card" value={row.creditCard} onChange={v=>upd('creditCard',v)}/>
+                  <PercentInput label="CC Fee (%)" value={row.creditCardFee} onChange={v=>upd('creditCardFee',v)}/>
                   <div className="text-center text-sm font-bold text-green-700 mt-1">{fmt(c.ccFeeAmt)}</div>
                 </div>
               </div>
@@ -398,77 +368,66 @@ th,td{border:1px solid #000;padding:6px 8px;font-size:14px}
             <div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <PercentInput label="House Fee (%)" value={row.houseFeePercent} onChange={v=>upd('houseFeePercent', v)} />
+                  <PercentInput label="House Fee (%)" value={row.houseFeePercent} onChange={v=>upd('houseFeePercent',v)}/>
                   <div className="text-center text-sm mt-2">House: {fmt(c.houseFee)}</div>
                   <div className="text-[11px] text-center text-gray-600 mt-1">Auto: 10% ≤ $20k; 9% ≤ $30k; 8% &gt; $30k</div>
                 </div>
                 <div>
-                  <MoneyInput label="Ride Along Fee" value={row.rideAlong} onChange={v=>upd('rideAlong', v)} />
+                  <MoneyInput label="Ride Along Fee" value={row.rideAlong} onChange={v=>upd('rideAlong',v)}/>
                   <div className="text-center text-sm mt-2">
-                    Per Person Split: {fmt((num(row.rideAlong)/(num(row.numVets)+num(row.numReps) || 1)))}
+                    Per Person Split: {
+                      fmt((num(row.rideAlong)/(num(row.numVets)+num(row.numReps) || 1)))
+                    }
                   </div>
                 </div>
-                <MoneyInput label="Ride Along Bonus" value={row.rideAlongBonus} onChange={v=>upd('rideAlongBonus', v)} />
+                <MoneyInput label="Ride Along Bonus" value={row.rideAlongBonus} onChange={v=>upd('rideAlongBonus',v)}/>
               </div>
 
               <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <CardTotal label="Total After Fees" value={fmt(c.afterFees)} />
-                <CardTotal label="Vets %" value={`${c.vetPct}%`} />
-                <CardTotal label="Reps %" value={`${c.repPct}%`} />
+                <Card label="Total After Fees" value={fmt(c.afterFees)}/>
+                <Card label="Vets %" value={`${c.vetPct}%`}/>
+                <Card label="Reps %" value={`${c.repPct}%`}/>
               </div>
             </div>
           </div>
 
           <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-8">
             <div>
-              <label className="text-xs font-bold block mb-1 uppercase">Vets on Contract</label>
-              <input type="text" inputMode="numeric" value={row.numVets||''}
-                     onChange={e=>upd('numVets', e.target.value)}
-                     placeholder="How many VETS?"
-                     className="w-full px-2 py-1 border-2 border-black rounded"/>
-              {num(row.numVets)>0 && <div className="mt-2 text-[12px] text-gray-700">Creates {row.numVets} Vet name field(s) below.</div>}
-              {num(row.numVets)>0 && <div className="mt-3 text-sm font-bold text-center">Per Vet: {fmt(compute(row).perVet)}</div>}
-              <NamesWithPills
-                role="vet"
-                count={row.numVets}
-                names={fit(row.vetNames,row.numVets)}
-                per={compute(row).perVet}
-                onSet={(i,val)=>setName('vet',i,val)}
-              />
+              <Label>Vets on Contract</Label>
+              <Text type="text" inputMode="numeric" value={row.numVets||''}
+                    onChange={e=>upd('numVets', e.target.value)} placeholder="How many VETS?"/>
+              {num(row.numVets)>0 && <div className="mt-2 text-xs text-gray-700">Creates {row.numVets} Vet name field(s) below.</div>}
+              {num(row.numVets)>0 && <div className="mt-1 text-sm font-bold text-center">Per Vet: {fmt(compute(row).perVet)}</div>}
+              <NamesWithPills role="vet" count={row.numVets}
+                names={fit(row.vetNames,row.numVets)} per={compute(row).perVet}
+                onSet={(i,v)=>{ /* set single name */ 
+                  const arr=[...rows]; const r={...arr[index]};
+                  r.vetNames=fit(r.vetNames,r.numVets); r.vetNames[i]=v; arr[index]=r; setRows(arr);
+                }}/>
             </div>
 
             <div>
-              <label className="text-xs font-bold block mb-1 uppercase">Reps on Contract</label>
-              <input type="text" inputMode="numeric" value={row.numReps||''}
-                     onChange={e=>upd('numReps', e.target.value)}
-                     placeholder="How many REPS?"
-                     className="w-full px-2 py-1 border-2 border-black rounded"/>
-              {num(row.numReps)>0 && <div className="mt-2 text-[12px] text-gray-700">Creates {row.numReps} Rep name field(s) below.</div>}
-              {num(row.numReps)>0 && <div className="mt-3 text-sm font-bold text-center">Per Rep: {fmt(compute(row).perRep)}</div>}
-              <NamesWithPills
-                role="rep"
-                count={row.numReps}
-                names={fit(row.repNames,row.numReps)}
-                per={compute(row).perRep}
-                onSet={(i,val)=>setName('rep',i,val)}
-              />
+              <Label>Reps on Contract</Label>
+              <Text type="text" inputMode="numeric" value={row.numReps||''}
+                    onChange={e=>upd('numReps', e.target.value)} placeholder="How many REPS?"/>
+              {num(row.numReps)>0 && <div className="mt-2 text-xs text-gray-700">Creates {row.numReps} Rep name field(s) below.</div>}
+              {num(row.numReps)>0 && <div className="mt-1 text-sm font-bold text-center">Per Rep: {fmt(compute(row).perRep)}</div>}
+              <NamesWithPills role="rep" count={row.numReps}
+                names={fit(row.repNames,row.numReps)} per={compute(row).perRep}
+                onSet={(i,v)=>{ const arr=[...rows]; const r={...arr[index]};
+                  r.repNames=fit(r.repNames,r.numReps); r.repNames[i]=v; arr[index]=r; setRows(arr); }}/>
             </div>
 
             <div>
-              <label className="text-xs font-bold block mb-1 uppercase">Ride-Alongs</label>
-              <input type="text" inputMode="numeric" value={row.numRideAlongs||''}
-                     onChange={e=>upd('numRideAlongs', e.target.value)}
-                     placeholder="How many RIDE-ALONGS?"
-                     className="w-full px-2 py-1 border-2 border-black rounded"/>
-              {num(row.numRideAlongs)>0 && <div className="mt-2 text-[12px] text-gray-700">Creates {row.numRideAlongs} Ride-Along name field(s) below.</div>}
-              {num(row.numRideAlongs)>0 && <div className="mt-3 text-sm font-bold text-center">Per RA: {fmt(compute(row).perRA)}</div>}
-              <NamesWithPills
-                role="ra"
-                count={row.numRideAlongs}
-                names={fit(row.rideAlongNames,row.numRideAlongs)}
-                per={compute(row).perRA}
-                onSet={(i,val)=>setName('ra',i,val)}
-              />
+              <Label>Ride-Alongs</Label>
+              <Text type="text" inputMode="numeric" value={row.numRideAlongs||''}
+                    onChange={e=>upd('numRideAlongs', e.target.value)} placeholder="How many RIDE-ALONGS?"/>
+              {num(row.numRideAlongs)>0 && <div className="mt-2 text-xs text-gray-700">Creates {row.numRideAlongs} Ride-Along name field(s) below.</div>}
+              {num(row.numRideAlongs)>0 && <div className="mt-1 text-sm font-bold text-center">Per RA: {fmt(compute(row).perRA)}</div>}
+              <NamesWithPills role="ra" count={row.numRideAlongs}
+                names={fit(row.rideAlongNames,row.numRideAlongs)} per={compute(row).perRA}
+                onSet={(i,v)=>{ const arr=[...rows]; const r={...arr[index]};
+                  r.rideAlongNames=fit(r.rideAlongNames,r.numRideAlongs); r.rideAlongNames[i]=v; arr[index]=r; setRows(arr); }}/>
             </div>
           </div>
         </div>
@@ -476,22 +435,22 @@ th,td{border:1px solid #000;padding:6px 8px;font-size:14px}
     }
 
     function App(){
-      const blank = ()=>({
-        id: Date.now()+Math.random(),
-        customerName:'', jobNumber:'',
-        contractAmount:'', cashCheck:'',
-        financeAmount:'', dealerFee:'',
-        creditCard:'', creditCardFee:'',
-        houseFeePercent:'', // auto if left empty
-        laborMaterial:'', rideAlong:'', rideAlongBonus:'',
-        numVets:'', numReps:'', numRideAlongs:'',
-        vetNames:[], repNames:[], rideAlongNames:[]
+      const blank=()=>({
+        id:Date.now()+Math.random(),
+        customerName:'',jobNumber:'',
+        contractAmount:'',cashCheck:'',
+        financeAmount:'',dealerFee:'',
+        creditCard:'',creditCardFee:'',
+        houseFeePercent:'', // auto if empty
+        laborMaterial:'',rideAlong:'',rideAlongBonus:'',
+        numVets:'',numReps:'',numRideAlongs:'',
+        vetNames:[],repNames:[],rideAlongNames:[]
       });
 
-      const [rows, setRows] = useState([blank()]);
+      const [rows,setRows]=useState([blank()]);
 
-      const printOne = (i)=> openPrint(buildSingle(rows[i], i), 'Calculator '+(i+1));
-      const printReport = ()=> openPrint(buildReport(rows), 'Payout Report');
+      const handlePrintOne = (i)=> openPrint(singlePrintHTML(rows[i], i), 'Calculator '+(i+1));
+      const handlePrintReport = ()=> openPrint(reportPrintHTML(rows), 'Payout Report');
 
       return (
         <div className="max-w-6xl mx-auto p-4">
@@ -500,30 +459,23 @@ th,td{border:1px solid #000;padding:6px 8px;font-size:14px}
               <h1 className="text-xl font-bold text-blue-800">ALTA CAL PROFIT SHARE</h1>
               <div className="flex gap-2">
                 <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-                        onClick={printReport}>
-                  Print Report
-                </button>
+                        onClick={handlePrintReport}>Print Report</button>
                 <button className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
-                        onClick={()=>setRows(r=>[...r, blank()])}>
-                  Add File
-                </button>
+                        onClick={()=>setRows(r=>[...r, blank()])}>Add File</button>
               </div>
             </div>
           </div>
 
           {rows.map((row,i)=>(
-            <CalcCard key={row.id} row={row} index={i} rows={rows} setRows={setRows} onPrint={printOne}/>
+            <CalcCard key={row.id} row={row} index={i} rows={rows} setRows={setRows} onPrint={handlePrintOne}/>
           ))}
         </div>
       );
     }
 
-    // Mount (wrapped in try to surface any problems)
     try{
-      ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-    }catch(e){
-      showBootError(e.message || String(e));
-    }
+      ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+    }catch(e){ showErr(e.message||String(e)); }
   </script>
 </body>
 </html>
