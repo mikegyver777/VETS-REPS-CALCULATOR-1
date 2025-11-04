@@ -15,7 +15,6 @@
   <!-- Babel so JSX works without a bundler -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- Print styles tuned for legal paper, tiny font for dense tables -->
   <style>
     @media print {
       @page { size: legal; margin: 0.25in; }
@@ -50,7 +49,6 @@
 <body class="bg-gray-100">
   <div id="root"></div>
 
-  <!-- NOTE: presets added to avoid blank page -->
   <script type="text/babel" data-presets="env,react">
     const { useState, useEffect } = React;
 
@@ -98,6 +96,38 @@
       };
     }
 
+    /* ------------------------------ Utilities ------------------------------ */
+    const formatCurrency = (value) => {
+      if (isNaN(value)) return '$0.00';
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency', currency: 'USD', minimumFractionDigits: 2
+      }).format(value);
+    };
+    const parseValue = (value) => {
+      if (value === null || value === undefined || value === '') return 0;
+      const parsed = parseFloat(value.toString().replace(/[,$]/g,''));
+      return isNaN(parsed) ? 0 : parsed;
+    };
+    const parseFee = (amount, fee) => {
+      if (!fee || fee === '') return 0;
+      const amountVal = parseValue(amount);
+      const feeStr = fee.toString().trim();
+      const percent = parseFloat(feeStr.replace('%','')) || 0;
+      const feeAmount = (amountVal * percent) / 100;
+      return Math.round(feeAmount * 100) / 100;
+    };
+    const onlyNum = s => (s||'').replace(/[^0-9.]/g, '');
+    const onlyInt = s => (s||'').replace(/[^0-9]/g, '');
+
+    // grow/trim a names array to exactly count elements
+    function fitNamesArray(arr, count) {
+      const c = Math.max(0, parseInt(count||0,10) || 0);
+      const base = Array.isArray(arr) ? [...arr] : [];
+      if (base.length > c) return base.slice(0, c);
+      if (base.length < c) return base.concat(Array.from({length: c - base.length}, (_,i) => ''));
+      return base;
+    }
+
     /* ------------------------------ App ------------------------------ */
     function App() {
       const [calculators, setCalculators] = useState([{
@@ -116,7 +146,10 @@
         rideAlongBonus: '',
         numRideAlongs: '',
         numVets: '',
-        numReps: ''
+        numReps: '',
+        vetNames: [],
+        repNames: [],
+        rideAlongNames: []
       }]);
 
       const [showReport, setShowReport] = useState(false);
@@ -129,27 +162,6 @@
 
       useEffect(() => { loadSavedReports(); }, []);
 
-      /* -------- helpers -------- */
-      const formatCurrency = (value) => {
-        if (isNaN(value)) return '$0.00';
-        return new Intl.NumberFormat('en-US', {
-          style: 'currency', currency: 'USD', minimumFractionDigits: 2
-        }).format(value);
-      };
-      const parseValue = (value) => {
-        if (value === null || value === undefined || value === '') return 0;
-        const parsed = parseFloat(value.toString().replace(/[,$]/g,''));
-        return isNaN(parsed) ? 0 : parsed;
-      };
-      const parseFee = (amount, fee) => {
-        if (!fee || fee === '') return 0;
-        const amountVal = parseValue(amount);
-        const feeStr = fee.toString().trim();
-        const percent = parseFloat(feeStr.replace('%','')) || 0;
-        const feeAmount = (amountVal * percent) / 100;
-        return Math.round(feeAmount * 100) / 100;
-      };
-
       /* -------- persistence -------- */
       async function loadSavedReports(){
         try {
@@ -161,6 +173,10 @@
                 const data = await window.storage.get(key);
                 if (data && data.value) {
                   const parsed = JSON.parse(data.value);
+                  // Backward compatibility: ensure arrays exist
+                  parsed.calculators = (parsed.calculators || []).map(c => ({
+                    vetNames: [], repNames: [], rideAlongNames: [], ...c
+                  }));
                   reports.push({ key, ...parsed });
                 }
               } catch(e){ console.log('Error loading a report:', e); }
@@ -210,7 +226,6 @@
 
         const percentOfContract = afterHouseFee > 0 ? (totalAfterFees / afterHouseFee) * 100 : 0;
 
-        // tiered rates
         let vetRate = 25;
         if (percentOfContract >= 50) vetRate = 55;
         else if (percentOfContract >= 40) vetRate = 45;
@@ -292,6 +307,7 @@
 
       const totals = calculateTotals();
 
+      /* ---------- render ---------- */
       return (
         <div className="min-h-screen bg-gray-100 p-4">
           {/* Header & actions */}
@@ -316,7 +332,6 @@
                   </div>
                 </div>
 
-                {/* Totals row (removed Total Profit card) */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                   <Card color="from-green-400 to-green-600" title="TOTAL VET PAYOUT" value={formatCurrency(totals.totalVetPayout)} />
                   <Card color="from-purple-400 to-purple-600" title="TOTAL REP PAYOUT" value={formatCurrency(totals.totalRepPayout)} />
@@ -332,11 +347,7 @@
                   calc={calc}
                   index={index}
                   calculators={calculators}
-                  setCalculators={setCalculators}
-                  formatCurrency={formatCurrency}
-                  parseValue={parseValue}
-                  parseFee={parseFee}
-                  calculateForOne={calculateForOne}
+                  setCalculators={(arr)=>setCalculators(arr)}
                   setPrintSingleCalc={setPrintSingleCalc}
                 />
               ))}
@@ -351,7 +362,8 @@
                       customerName:'', jobNumber:'', contractAmount:'', cashCheck:'',
                       financeAmount:'', dealerFee:'', creditCard:'', creditCardFee:'',
                       houseFeePercent:'', laborMaterial:'', rideAlong:'', rideAlongBonus:'',
-                      numRideAlongs:'', numVets:'', numReps:''
+                      numRideAlongs:'', numVets:'', numReps:'',
+                      vetNames:[], repNames:[], rideAlongNames:[]
                     }]);
                   }}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-full shadow-lg inline-flex items-center gap-3 text-xl">
@@ -368,7 +380,6 @@
               calculateForOne={calculateForOne}
               parseValue={parseValue}
               formatCurrency={formatCurrency}
-              totals={totals}
               onClose={()=>setShowReport(false)}
             />
           )}
@@ -527,19 +538,37 @@
       </div>
     );
 
-    function CalculatorCard({
-      calc, index, calculators, setCalculators,
-      formatCurrency, parseValue, parseFee, calculateForOne, setPrintSingleCalc
-    }){
+    function CalculatorCard({ calc, index, calculators, setCalculators, setPrintSingleCalc }) {
       const data = calculateForOne(calc);
 
       function update(key, val){
         const arr = [...calculators];
-        arr[index][key] = val;
+        // counts: also fit arrays
+        if (key === 'numVets') {
+          arr[index][key] = onlyInt(val);
+          arr[index].vetNames = fitNamesArray(arr[index].vetNames, arr[index][key]);
+        } else if (key === 'numReps') {
+          arr[index][key] = onlyInt(val);
+          arr[index].repNames = fitNamesArray(arr[index].repNames, arr[index][key]);
+        } else if (key === 'numRideAlongs') {
+          arr[index][key] = onlyInt(val);
+          arr[index].rideAlongNames = fitNamesArray(arr[index].rideAlongNames, arr[index][key]);
+        } else {
+          arr[index][key] = val;
+        }
         setCalculators(arr);
       }
-      const onlyNum = s => (s||'').replace(/[^0-9.]/g, '');
-      const onlyInt = s => (s||'').replace(/[^0-9]/g, '');
+
+      function updateName(kind, i, val){
+        const arr = [...calculators];
+        const key = kind + 'Names';
+        arr[index][key] = fitNamesArray(arr[index][key], 
+          kind === 'vet' ? arr[index].numVets :
+          kind === 'rep' ? arr[index].numReps : arr[index].numRideAlongs
+        );
+        arr[index][key][i] = val;
+        setCalculators(arr);
+      }
 
       return (
         <div className="relative mb-6 bg-white border-4 border-gray-300 rounded-lg">
@@ -559,6 +588,7 @@
             </button>
           </div>
 
+          {/* Customer / Job */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 border-b-2 border-black">
             <LabeledInput label="CUSTOMER NAME" value={calc.customerName}
                           onChange={(v)=>update('customerName', v)} placeholder="Enter customer name"/>
@@ -567,6 +597,7 @@
           </div>
 
           <div className="p-6 space-y-6">
+            {/* CONTRACT & PAYMENT */}
             <Section title="CONTRACT & PAYMENT" color="blue">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <CurrencyInput label="CONTRACT AMOUNT" value={calc.contractAmount}
@@ -578,13 +609,14 @@
               </div>
             </Section>
 
+            {/* FINANCE INFO */}
             <Section title="FINANCE INFO" color="green">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <CurrencyInput label="FINANCE AMOUNT" value={calc.financeAmount}
                                  onChange={v=>update('financeAmount', onlyNum(v))}/>
-                  <LabeledInput label="DEALER FEE" value={calc.dealerFee}
-                                onChange={v=>update('dealerFee', v)} placeholder="3.5 or 150"/>
+                  <LabeledInput label="DEALER FEE (%)" value={calc.dealerFee}
+                                onChange={v=>update('dealerFee', v)} placeholder="e.g., 3.5"/>
                   {calc.dealerFee && parseValue(calc.financeAmount) > 0 && (
                     <div className="text-center text-sm font-bold text-green-700 mt-1">
                       {formatCurrency(parseFee(calc.financeAmount, calc.dealerFee))}
@@ -594,7 +626,7 @@
                 <div>
                   <CurrencyInput label="CREDIT CARD" value={calc.creditCard}
                                  onChange={v=>update('creditCard', onlyNum(v))}/>
-                  <LabeledInput label="CC FEE %" value={calc.creditCardFee}
+                  <LabeledInput label="CC FEE (%)" value={calc.creditCardFee}
                                 onChange={v=>update('creditCardFee', v)}/>
                   {calc.creditCardFee && parseValue(calc.creditCard) > 0 && (
                     <div className="text-center text-sm font-bold text-green-700 mt-1">
@@ -605,6 +637,7 @@
               </div>
             </Section>
 
+            {/* FEES & BONUSES */}
             <Section title="FEES & BONUSES" color="orange">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -638,6 +671,7 @@
               </div>
             </Section>
 
+            {/* CALCULATED TOTALS */}
             <Section title="CALCULATED TOTALS" color="purple">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <StatCard title="TOTAL AFTER FEES" value={formatCurrency(data.totalAfterFees)} />
@@ -646,11 +680,13 @@
               </div>
             </Section>
 
+            {/* TEAM PAYOUTS + NAMES */}
             <Section title="TEAM PAYOUTS" color="yellow">
-              <div className="space-y-4">
+              <div className="space-y-6">
+                {/* VETS */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <NumberInput label="VETS ON CONTRACT" value={calc.numVets}
-                               onChange={v=>update('numVets', onlyInt(v))}/>
+                               onChange={v=>update('numVets', v)}/>
                   {parseValue(calc.numVets) > 0 && (
                     <>
                       <div className="bg-green-100 rounded-lg p-6 border-2 border-green-600">
@@ -664,9 +700,22 @@
                   )}
                 </div>
 
+                {parseValue(calc.numVets) > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {fitNamesArray(calc.vetNames, calc.numVets).map((name, i) => (
+                      <LabeledInput key={i}
+                        label={`VET ${i+1} NAME`}
+                        value={name}
+                        onChange={(v)=>updateName('vet', i, v)}
+                        placeholder="Enter name"/>
+                    ))}
+                  </div>
+                )}
+
+                {/* REPS */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <NumberInput label="REPS ON CONTRACT" value={calc.numReps}
-                               onChange={v=>update('numReps', onlyInt(v))}/>
+                               onChange={v=>update('numReps', v)}/>
                   {parseValue(calc.numReps) > 0 && (
                     <>
                       <div className="bg-purple-100 rounded-lg p-6 border-2 border-purple-600">
@@ -680,14 +729,22 @@
                   )}
                 </div>
 
-                <div className="bg-gradient-to-r from-green-400 to-green-600 rounded-lg p-6 text-center shadow-lg">
-                  <div className="text-lg font-bold text-white mb-2">COMBINED PAYOUT</div>
-                  <div className="text-4xl font-bold text-white">{formatCurrency(data.combinedPayout)}</div>
-                </div>
+                {parseValue(calc.numReps) > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {fitNamesArray(calc.repNames, calc.numReps).map((name, i) => (
+                      <LabeledInput key={i}
+                        label={`REP ${i+1} NAME`}
+                        value={name}
+                        onChange={(v)=>updateName('rep', i, v)}
+                        placeholder="Enter name"/>
+                    ))}
+                  </div>
+                )}
 
+                {/* RIDE ALONGS */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <NumberInput label="RIDE ALONGS ON CONTRACT" value={calc.numRideAlongs || ''}
-                               onChange={v=>update('numRideAlongs', onlyInt(v))}/>
+                               onChange={v=>update('numRideAlongs', v)}/>
                   {parseValue(calc.numRideAlongs) > 0 && (
                     <>
                       <StatCard title="PER RIDE ALONG" value={formatCurrency(data.perRideAlongPayout)} />
@@ -695,6 +752,18 @@
                     </>
                   )}
                 </div>
+
+                {parseValue(calc.numRideAlongs) > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {fitNamesArray(calc.rideAlongNames, calc.numRideAlongs).map((name, i) => (
+                      <LabeledInput key={i}
+                        label={`RIDE ALONG ${i+1} NAME`}
+                        value={name}
+                        onChange={(v)=>updateName('rideAlong', i, v)}
+                        placeholder="Enter name"/>
+                    ))}
+                  </div>
+                )}
 
                 {parseValue(calc.numRideAlongs) > 0 && (
                   <div className="bg-gradient-to-r from-red-400 to-red-600 rounded-lg p-6 text-center shadow-lg">
@@ -709,12 +778,15 @@
       );
     }
 
-    /* Print views */
-
-    function ReportView({calculators, calculateForOne, parseValue, formatCurrency, totals, onClose}) {
+    /* -------------------- Print: Summary Report -------------------- */
+    function ReportView({calculators, calculateForOne, parseValue, formatCurrency, onClose}) {
       const hasVets = calculators.some(c => parseValue(c.numVets) > 0);
       const hasReps = calculators.some(c => parseValue(c.numReps) > 0);
       const hasRAs  = calculators.some(c => parseValue(c.numRideAlongs) > 0);
+
+      const nameList = (arr, perAmt) =>
+        (arr||[]).filter(n => (n||'').trim().length>0)
+                 .map(n => `${n.trim()} (${formatCurrency(perAmt)})`).join(', ');
 
       return (
         <div className="print-report bg-white p-4">
@@ -725,47 +797,58 @@
                 <th className="border border-black p-1 text-left">#</th>
                 <th className="border border-black p-1 text-left">Customer</th>
                 <th className="border border-black p-1 text-left">Job#</th>
-                {hasVets && (<><th className="border border-black p-1 text-right">Vets</th><th className="border border-black p-1 text-right">Per Vet</th><th className="border border-black p-1 text-right">Total Vet</th></>)}
-                {hasReps && (<><th className="border border-black p-1 text-right">Reps</th><th className="border border-black p-1 text-right">Per Rep</th><th className="border border-black p-1 text-right">Total Rep</th></>)}
-                {hasRAs  && (<><th className="border border-black p-1 text-right">RAs</th><th className="border border-black p-1 text-right">Per RA</th><th className="border border-black p-1 text-right">Total RA</th></>)}
+                {hasVets && <>
+                  <th className="border border-black p-1 text-right">Vets</th>
+                  <th className="border border-black p-1 text-left">Vet Names (amt)</th>
+                </>}
+                {hasReps && <>
+                  <th className="border border-black p-1 text-right">Reps</th>
+                  <th className="border border-black p-1 text-left">Rep Names (amt)</th>
+                </>}
+                {hasRAs && <>
+                  <th className="border border-black p-1 text-right">RAs</th>
+                  <th className="border border-black p-1 text-left">RA Names (amt)</th>
+                </>}
                 <th className="border border-black p-1 text-right bg-green-200">Combined</th>
               </tr>
             </thead>
             <tbody>
-              {calculators.map((data, i)=>{
-                const c = calculateForOne(data);
+              {calculators.map((row, i)=>{
+                const c = calculateForOne(row);
+                const vets = fitNamesArray(row.vetNames, row.numVets);
+                const reps = fitNamesArray(row.repNames, row.numReps);
+                const ras  = fitNamesArray(row.rideAlongNames, row.numRideAlongs);
                 return (
-                  <tr key={i} className="border-b border-gray-400">
+                  <tr key={i} className="border-b border-gray-400 align-top">
                     <td className="border border-black p-1">{i+1}</td>
-                    <td className="border border-black p-1">{data.customerName || 'N/A'}</td>
-                    <td className="border border-black p-1">{data.jobNumber || 'N/A'}</td>
-                    {hasVets && (<>
-                      <td className="border border-black p-1 text-right">{parseValue(data.numVets) || ''}</td>
-                      <td className="border border-black p-1 text-right">{parseValue(data.numVets)?formatCurrency(c.finalPerVetPayout):''}</td>
-                      <td className="border border-black p-1 text-right bg-green-50 font-bold">{parseValue(data.numVets)?formatCurrency(c.finalTotalVetsPayout):''}</td>
-                    </>)}
-                    {hasReps && (<>
-                      <td className="border border-black p-1 text-right">{parseValue(data.numReps) || ''}</td>
-                      <td className="border border-black p-1 text-right">{parseValue(data.numReps)?formatCurrency(c.finalPerRepPayout):''}</td>
-                      <td className="border border-black p-1 text-right bg-purple-50 font-bold">{parseValue(data.numReps)?formatCurrency(c.finalTotalRepsPayout):''}</td>
-                    </>)}
-                    {hasRAs && (<>
-                      <td className="border border-black p-1 text-right">{parseValue(data.numRideAlongs) || ''}</td>
-                      <td className="border border-black p-1 text-right">{parseValue(data.numRideAlongs)?formatCurrency(c.perRideAlongPayout):''}</td>
-                      <td className="border border-black p-1 text-right bg-red-50 font-bold">{parseValue(data.numRideAlongs)?formatCurrency(c.totalRideAlongPayout):''}</td>
-                    </>)}
+                    <td className="border border-black p-1">{row.customerName || 'N/A'}</td>
+                    <td className="border border-black p-1">{row.jobNumber || 'N/A'}</td>
+
+                    {hasVets && <>
+                      <td className="border border-black p-1 text-right">{parseValue(row.numVets) || ''}</td>
+                      <td className="border border-black p-1 text-left">
+                        {parseValue(row.numVets) ? nameList(vets, c.finalPerVetPayout) : ''}
+                      </td>
+                    </>}
+
+                    {hasReps && <>
+                      <td className="border border-black p-1 text-right">{parseValue(row.numReps) || ''}</td>
+                      <td className="border border-black p-1 text-left">
+                        {parseValue(row.numReps) ? nameList(reps, c.finalPerRepPayout) : ''}
+                      </td>
+                    </>}
+
+                    {hasRAs && <>
+                      <td className="border border-black p-1 text-right">{parseValue(row.numRideAlongs) || ''}</td>
+                      <td className="border border-black p-1 text-left">
+                        {parseValue(row.numRideAlongs) ? nameList(ras, c.perRideAlongPayout) : ''}
+                      </td>
+                    </>}
+
                     <td className="border border-black p-1 text-right bg-green-200 font-bold">{formatCurrency(c.combinedPayout)}</td>
                   </tr>
                 );
               })}
-
-              <tr className="bg-yellow-100 font-bold border-t-4 border-black">
-                <td colSpan="3" className="border border-black p-1 text-right">TOTALS:</td>
-                {hasVets && (<><td colSpan="2" className="border border-black p-1"></td><td className="border border-black p-1 text-right bg-green-100">{formatCurrency(totals.totalVetPayout)}</td></>)}
-                {hasReps && (<><td colSpan="2" className="border border-black p-1"></td><td className="border border-black p-1 text-right bg-purple-100">{formatCurrency(totals.totalRepPayout)}</td></>)}
-                {hasRAs  && (<><td colSpan="2" className="border border-black p-1"></td><td className="border border-black p-1 text-right bg-red-100">{formatCurrency(totals.totalRideAlongPayout)}</td></>)}
-                <td className="border border-black p-1 text-right bg-green-300">{formatCurrency(totals.totalCombinedPayout)}</td>
-              </tr>
             </tbody>
           </table>
 
@@ -779,9 +862,13 @@
       );
     }
 
+    /* -------------------- Print: Single Calculator -------------------- */
     function SingleCalcPrint({index, calculators, calculateForOne, parseValue, formatCurrency, onClose}) {
       const calc = calculators[index];
-      const data = calculateForOne(calc);
+      const c = calculateForOne(calc);
+      const vets = fitNamesArray(calc.vetNames, calc.numVets);
+      const reps = fitNamesArray(calc.repNames, calc.numReps);
+      const ras  = fitNamesArray(calc.rideAlongNames, calc.numRideAlongs);
 
       return (
         <div className="print-single-calc bg-white p-6">
@@ -793,84 +880,58 @@
           </div>
 
           <div className="mb-4 bg-blue-50 border-2 border-blue-400 rounded p-4">
-            <h3 className="font-bold text-lg mb-2">CONTRACT & PAYMENT</h3>
+            <h3 className="font-bold text-lg mb-2">CALCULATED TOTALS</h3>
             <div className="grid grid-cols-3 gap-4">
-              <div><strong>Contract Amount:</strong> {formatCurrency(parseValue(calc.contractAmount))}</div>
-              <div><strong>Cash/Check:</strong> {formatCurrency(parseValue(calc.cashCheck))}</div>
-              <div><strong>Labor & Material:</strong> {formatCurrency(parseValue(calc.laborMaterial))}</div>
+              <div><strong>Total After Fees:</strong> {formatCurrency(c.totalAfterFees)}</div>
+              <div><strong>Vets %:</strong> {c.vetRate}%</div>
+              <div><strong>Reps %:</strong> {c.repRate}%</div>
             </div>
           </div>
 
-          <div className="mb-4 bg-green-50 border-2 border-green-400 rounded p-4">
-            <h3 className="font-bold text-lg mb-2">FINANCE INFO</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div><strong>Finance Amount:</strong> {formatCurrency(parseValue(calc.financeAmount))}</div>
-                <div><strong>Dealer Fee:</strong> {calc.dealerFee || 'N/A'} ({formatCurrency(data.dealerFeeAmount)})</div>
+          {/* VETS */}
+          {parseValue(calc.numVets) > 0 && (
+            <div className="mb-4 bg-green-50 border-2 border-green-400 rounded p-4">
+              <h3 className="font-bold text-lg mb-2">VETS</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {vets.map((n, i) => (
+                  <div key={i} className="flex justify-between border rounded px-3 py-2 bg-white">
+                    <div className="font-semibold">{n || `Vet ${i+1}`}</div>
+                    <div className="font-bold text-green-700">{formatCurrency(c.finalPerVetPayout)}</div>
+                  </div>
+                ))}
               </div>
-              <div>
-                <div><strong>Credit Card:</strong> {formatCurrency(parseValue(calc.creditCard))}</div>
-                <div><strong>CC Fee:</strong> {calc.creditCardFee || 'N/A'} ({formatCurrency(parseFloat(calc.creditCardFee||0)/100 * parseValue(calc.creditCard))})</div>
+            </div>
+          )}
+
+          {/* REPS */}
+          {parseValue(calc.numReps) > 0 && (
+            <div className="mb-4 bg-purple-50 border-2 border-purple-400 rounded p-4">
+              <h3 className="font-bold text-lg mb-2">REPS</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {reps.map((n, i) => (
+                  <div key={i} className="flex justify-between border rounded px-3 py-2 bg-white">
+                    <div className="font-semibold">{n || `Rep ${i+1}`}</div>
+                    <div className="font-bold text-purple-700">{formatCurrency(c.finalPerRepPayout)}</div>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="mb-4 bg-orange-50 border-2 border-orange-400 rounded p-4">
-            <h3 className="font-bold text-lg mb-2">FEES & BONUSES</h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div><div><strong>House Fee %:</strong> {calc.houseFeePercent}%</div><div><strong>Amount:</strong> {formatCurrency(data.houseFeeAmount)}</div></div>
-              <div><div><strong>Ride Along Fee:</strong> {formatCurrency(parseValue(calc.rideAlong))}</div><div><strong>Per Person:</strong> {formatCurrency(data.rideAlongFeePerPerson)}</div></div>
-              <div><div><strong>Ride Along Bonus:</strong> {formatCurrency(parseValue(calc.rideAlongBonus))}</div><div><strong>CC Fee Per Person:</strong> {formatCurrency(data.creditCardFeePerPerson)}</div></div>
-            </div>
-          </div>
-
-          <div className="mb-4 bg-purple-50 border-2 border-purple-400 rounded p-4">
-            <h3 className="font-bold text-lg mb-2 text-center">CALCULATED TOTALS</h3>
-            <div className="grid grid-cols-3 gap-4 text-center">
-              <div className="bg-white rounded p-3 border-2"><div className="text-sm font-bold">TOTAL AFTER FEES</div><div className="text-2xl font-bold">{formatCurrency(data.totalAfterFees)}</div></div>
-              <div className="bg-white rounded p-3 border-2"><div className="text-sm font-bold">VETS PROFIT %</div><div className="text-2xl font-bold">{data.vetRate}%</div></div>
-              <div className="bg-white rounded p-3 border-2"><div className="text-sm font-bold">REP PROFIT %</div><div className="text-2xl font-bold">{data.repRate}%</div></div>
-            </div>
-          </div>
-
-          <div className="mb-4 bg-yellow-50 border-2 border-yellow-400 rounded p-4">
-            <h3 className="font-bold text-lg mb-3 text-center">TEAM PAYOUTS</h3>
-
-            {parseValue(calc.numVets) > 0 && (
-              <div className="grid grid-cols-3 gap-4 mb-3">
-                <div className="text-center"><div className="font-bold">VETS ON CONTRACT</div><div className="text-xl">{parseValue(calc.numVets)}</div></div>
-                <div className="bg-white rounded p-3 border-2 text-center"><div className="text-sm font-bold">PER VET</div><div className="text-xl font-bold text-green-700">{formatCurrency(data.finalPerVetPayout)}</div></div>
-                <div className="bg-white rounded p-3 border-2 text-center"><div className="text-sm font-bold">TOTAL VET PAYOUT</div><div className="text-xl font-bold">{formatCurrency(data.finalTotalVetsPayout)}</div></div>
+          {/* RIDE ALONGS */}
+          {parseValue(calc.numRideAlongs) > 0 && (
+            <div className="mb-4 bg-red-50 border-2 border-red-400 rounded p-4">
+              <h3 className="font-bold text-lg mb-2">RIDE ALONGS</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {ras.map((n, i) => (
+                  <div key={i} className="flex justify-between border rounded px-3 py-2 bg-white">
+                    <div className="font-semibold">{n || `Ride Along ${i+1}`}</div>
+                    <div className="font-bold text-red-700">{formatCurrency(c.perRideAlongPayout)}</div>
+                  </div>
+                ))}
               </div>
-            )}
-
-            {parseValue(calc.numReps) > 0 && (
-              <div className="grid grid-cols-3 gap-4 mb-3">
-                <div className="text-center"><div className="font-bold">REPS ON CONTRACT</div><div className="text-xl">{parseValue(calc.numReps)}</div></div>
-                <div className="bg-white rounded p-3 border-2 text-center"><div className="text-sm font-bold">PER REP</div><div className="text-xl font-bold text-purple-700">{formatCurrency(data.finalPerRepPayout)}</div></div>
-                <div className="bg-white rounded p-3 border-2 text-center"><div className="text-sm font-bold">TOTAL REP PAYOUT</div><div className="text-xl font-bold">{formatCurrency(data.finalTotalRepsPayout)}</div></div>
-              </div>
-            )}
-
-            <div className="bg-gradient-to-r from-green-400 to-green-600 rounded p-4 text-center mb-3">
-              <div className="font-bold text-white">COMBINED PAYOUT</div>
-              <div className="text-3xl font-bold text-white">{formatCurrency(data.combinedPayout)}</div>
             </div>
-
-            {parseValue(calc.numRideAlongs) > 0 && (
-              <>
-                <div className="grid grid-cols-3 gap-4 mb-3">
-                  <div className="text-center"><div className="font-bold">RIDE ALONGS</div><div className="text-xl">{parseValue(calc.numRideAlongs)}</div></div>
-                  <div className="bg-white rounded p-3 border-2 text-center"><div className="text-sm font-bold">PER RIDE ALONG</div><div className="text-xl font-bold">{formatCurrency(data.perRideAlongPayout)}</div></div>
-                  <div className="bg-white rounded p-3 border-2 text-center"><div className="text-sm font-bold">TOTAL RA PAYOUT</div><div className="text-xl font-bold">{formatCurrency(data.totalRideAlongPayout)}</div></div>
-                </div>
-                <div className="bg-gradient-to-r from-red-400 to-red-600 rounded p-4 text-center mb-3">
-                  <div className="font-bold text-white">RIDE ALONG PAYOUT</div>
-                  <div className="text-3xl font-bold text-white">{formatCurrency(data.totalRideAlongPayout)}</div>
-                </div>
-              </>
-            )}
-          </div>
+          )}
 
           <div className="no-print mt-6 text-center">
             <button onClick={onClose} className="bg-gray-600 text-white font-bold py-3 px-8 rounded-lg">CLOSE</button>
