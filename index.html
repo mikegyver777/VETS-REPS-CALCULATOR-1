@@ -50,9 +50,107 @@
   <div id="root"></div>
 
   <script type="text/babel" data-presets="env,react">
-    const { useState, useEffect } = React;
+    /* ================== GLOBAL HELPERS (accessible to all components) ================== */
+    const formatCurrency = (value) => {
+      if (isNaN(value)) return '$0.00';
+      return new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', minimumFractionDigits:2 }).format(value);
+    };
+    const parseValue = (value) => {
+      if (value === null || value === undefined || value === '') return 0;
+      const parsed = parseFloat(value.toString().replace(/[,$]/g,''));
+      return isNaN(parsed) ? 0 : parsed;
+    };
+    const parseFee = (amount, fee) => {
+      if (!fee || fee === '') return 0;
+      const amountVal = parseValue(amount);
+      const feeStr = fee.toString().trim();
+      const percent = parseFloat(feeStr.replace('%','')) || 0;
+      const feeAmount = (amountVal * percent) / 100;
+      return Math.round(feeAmount * 100) / 100;
+    };
+    const onlyNum = s => (s||'').replace(/[^0-9.]/g, '');
+    const onlyInt = s => (s||'').replace(/[^0-9]/g, '');
+    function fitNamesArray(arr, count) {
+      const c = Math.max(0, parseInt(count||0,10) || 0);
+      const base = Array.isArray(arr) ? [...arr] : [];
+      if (base.length > c) return base.slice(0, c);
+      if (base.length < c) return base.concat(Array.from({length: c - base.length}, () => ''));
+      return base;
+    }
+    function calculateForOne(data){
+      const contractAmount   = parseValue(data.contractAmount);
+      const houseFeePercent  = parseValue(data.houseFeePercent);
+      const houseFeeAmount   = (contractAmount * houseFeePercent) / 100;
 
-    /* ---------- Inline SVG icons ---------- */
+      const dealerFeeAmount  = parseFee(data.financeAmount, data.dealerFee);
+      const creditCardFeeAmt = parseFee(data.creditCard, data.creditCardFee);
+
+      const afterHouseFee    = contractAmount - houseFeeAmount;
+      const totalAfterFees   = afterHouseFee - parseValue(data.laborMaterial) - dealerFeeAmount;
+      const afterJobCost     = totalAfterFees;
+
+      const percentOfContract = afterHouseFee > 0 ? (totalAfterFees / afterHouseFee) * 100 : 0;
+
+      let vetRate = 25;
+      if (percentOfContract >= 50) vetRate = 55;
+      else if (percentOfContract >= 40) vetRate = 45;
+      else if (percentOfContract >= 33) vetRate = 35;
+
+      let repRate = 20;
+      if (percentOfContract >= 50) repRate = 40;
+      else if (percentOfContract >= 40) repRate = 30;
+      else if (percentOfContract >= 33) repRate = 25;
+
+      const vetsCount   = parseValue(data.numVets);
+      const repsCount   = parseValue(data.numReps);
+      const totalPeople = vetsCount + repsCount;
+
+      const vetCommissionTotal = (totalAfterFees * vetRate) / 100;
+      const repCommissionTotal = (totalAfterFees * repRate) / 100;
+
+      const perVetPayout = totalPeople > 0 ? (vetCommissionTotal / totalPeople) : 0;
+      const perRepPayout = totalPeople > 0 ? (repCommissionTotal / totalPeople) : 0;
+
+      const rideAlongFeeAmount    = parseValue(data.rideAlong);
+      const rideAlongFeePerPerson = totalPeople > 0 ? rideAlongFeeAmount / totalPeople : 0;
+
+      const creditCardFeePerPerson = totalPeople > 0 ? creditCardFeeAmt / totalPeople : 0;
+
+      const finalPerVetPayout = perVetPayout - rideAlongFeePerPerson - creditCardFeePerPerson;
+      const finalPerRepPayout = perRepPayout - rideAlongFeePerPerson - creditCardFeePerPerson;
+
+      const finalTotalVetsPayout = finalPerVetPayout * vetsCount;
+      const finalTotalRepsPayout = finalPerRepPayout * repsCount;
+
+      const rideAlongBonusAmount  = parseValue(data.rideAlongBonus);
+      const totalRideAlongPayout  = rideAlongFeeAmount + rideAlongBonusAmount;
+
+      const numRideAlongs         = parseValue(data.numRideAlongs);
+      const perRideAlongPayout    = numRideAlongs > 0 ? (totalRideAlongPayout / numRideAlongs) : 0;
+
+      return {
+        houseFeeAmount,
+        dealerFeeAmount,
+        totalAfterFees: afterJobCost,
+        afterJobCost,
+        percentOfContract,
+        vetRate,
+        repRate,
+        perVetPayout,
+        perRepPayout,
+        rideAlongFeePerPerson,
+        creditCardFeePerPerson,
+        finalPerVetPayout,
+        finalPerRepPayout,
+        finalTotalVetsPayout,
+        finalTotalRepsPayout,
+        combinedPayout: finalTotalVetsPayout + finalTotalRepsPayout,
+        totalRideAlongPayout,
+        perRideAlongPayout
+      };
+    }
+
+    /* ---------- Inline icons ---------- */
     const Icon = ({children, size=24}) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -79,7 +177,7 @@
       </Icon>
     );
 
-    /* ---------- LocalStorage-backed window.storage polyfill ---------- */
+    /* ---------- LocalStorage-backed window.storage ---------- */
     if (!window.storage) {
       window.storage = {
         async list(prefix='') {
@@ -96,41 +194,9 @@
       };
     }
 
-    /* ------------------------------ Utilities ------------------------------ */
-    const formatCurrency = (value) => {
-      if (isNaN(value)) return '$0.00';
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency', currency: 'USD', minimumFractionDigits: 2
-      }).format(value);
-    };
-    const parseValue = (value) => {
-      if (value === null || value === undefined || value === '') return 0;
-      const parsed = parseFloat(value.toString().replace(/[,$]/g,''));
-      return isNaN(parsed) ? 0 : parsed;
-    };
-    const parseFee = (amount, fee) => {
-      if (!fee || fee === '') return 0;
-      const amountVal = parseValue(amount);
-      const feeStr = fee.toString().trim();
-      const percent = parseFloat(feeStr.replace('%','')) || 0;
-      const feeAmount = (amountVal * percent) / 100;
-      return Math.round(feeAmount * 100) / 100;
-    };
-    const onlyNum = s => (s||'').replace(/[^0-9.]/g, '');
-    const onlyInt = s => (s||'').replace(/[^0-9]/g, '');
-
-    // grow/trim a names array to exactly count elements
-    function fitNamesArray(arr, count) {
-      const c = Math.max(0, parseInt(count||0,10) || 0);
-      const base = Array.isArray(arr) ? [...arr] : [];
-      if (base.length > c) return base.slice(0, c);
-      if (base.length < c) return base.concat(Array.from({length: c - base.length}, (_,i) => ''));
-      return base;
-    }
-
-    /* ------------------------------ App ------------------------------ */
+    /* =============================== APP =============================== */
     function App() {
-      const [calculators, setCalculators] = useState([{
+      const [calculators, setCalculators] = React.useState([{
         id: 1,
         customerName: '',
         jobNumber: '',
@@ -152,17 +218,16 @@
         rideAlongNames: []
       }]);
 
-      const [showReport, setShowReport] = useState(false);
-      const [savedReports, setSavedReports] = useState([]);
-      const [showSavedReports, setShowSavedReports] = useState(false);
-      const [reportName, setReportName] = useState('');
-      const [showSaveDialog, setShowSaveDialog] = useState(false);
-      const [deleteConfirm, setDeleteConfirm] = useState(null);
-      const [printSingleCalc, setPrintSingleCalc] = useState(null);
+      const [showReport, setShowReport] = React.useState(false);
+      const [savedReports, setSavedReports] = React.useState([]);
+      const [showSavedReports, setShowSavedReports] = React.useState(false);
+      const [reportName, setReportName] = React.useState('');
+      const [showSaveDialog, setShowSaveDialog] = React.useState(false);
+      const [deleteConfirm, setDeleteConfirm] = React.useState(null);
+      const [printSingleCalc, setPrintSingleCalc] = React.useState(null);
 
-      useEffect(() => { loadSavedReports(); }, []);
+      React.useEffect(() => { loadSavedReports(); }, []);
 
-      /* -------- persistence -------- */
       async function loadSavedReports(){
         try {
           const result = await window.storage.list('report:');
@@ -173,7 +238,6 @@
                 const data = await window.storage.get(key);
                 if (data && data.value) {
                   const parsed = JSON.parse(data.value);
-                  // Backward compatibility: ensure arrays exist
                   parsed.calculators = (parsed.calculators || []).map(c => ({
                     vetNames: [], repNames: [], rideAlongNames: [], ...c
                   }));
@@ -211,80 +275,6 @@
         }
       }
 
-      /* -------- calculations -------- */
-      function calculateForOne(data){
-        const contractAmount = parseValue(data.contractAmount);
-        const houseFeePercent = parseValue(data.houseFeePercent);
-        const houseFeeAmount = (contractAmount * houseFeePercent) / 100;
-
-        const dealerFeeAmount = parseFee(data.financeAmount, data.dealerFee);
-        const creditCardFeeAmount = parseFee(data.creditCard, data.creditCardFee);
-
-        const afterHouseFee = contractAmount - houseFeeAmount;
-        const totalAfterFees = afterHouseFee - parseValue(data.laborMaterial) - dealerFeeAmount;
-        const afterJobCost = totalAfterFees;
-
-        const percentOfContract = afterHouseFee > 0 ? (totalAfterFees / afterHouseFee) * 100 : 0;
-
-        let vetRate = 25;
-        if (percentOfContract >= 50) vetRate = 55;
-        else if (percentOfContract >= 40) vetRate = 45;
-        else if (percentOfContract >= 33) vetRate = 35;
-
-        let repRate = 20;
-        if (percentOfContract >= 50) repRate = 40;
-        else if (percentOfContract >= 40) repRate = 30;
-        else if (percentOfContract >= 33) repRate = 25;
-
-        const vetsCount = parseValue(data.numVets);
-        const repsCount = parseValue(data.numReps);
-        const totalPeople = vetsCount + repsCount;
-
-        const vetCommissionTotal = (totalAfterFees * vetRate) / 100;
-        const repCommissionTotal = (totalAfterFees * repRate) / 100;
-
-        const perVetPayout = totalPeople > 0 ? (vetCommissionTotal / totalPeople) : 0;
-        const perRepPayout = totalPeople > 0 ? (repCommissionTotal / totalPeople) : 0;
-
-        const rideAlongFeeAmount = parseValue(data.rideAlong);
-        const rideAlongFeePerPerson = totalPeople > 0 ? rideAlongFeeAmount / totalPeople : 0;
-
-        const creditCardFeePerPerson = totalPeople > 0 ? creditCardFeeAmount / totalPeople : 0;
-
-        const finalPerVetPayout = perVetPayout - rideAlongFeePerPerson - creditCardFeePerPerson;
-        const finalPerRepPayout = perRepPayout - rideAlongFeePerPerson - creditCardFeePerPerson;
-
-        const finalTotalVetsPayout = finalPerVetPayout * vetsCount;
-        const finalTotalRepsPayout = finalPerRepPayout * repsCount;
-
-        const rideAlongBonusAmount = parseValue(data.rideAlongBonus);
-        const totalRideAlongPayout = rideAlongFeeAmount + rideAlongBonusAmount;
-
-        const numRideAlongs = parseValue(data.numRideAlongs);
-        const perRideAlongPayout = numRideAlongs > 0 ? (totalRideAlongPayout / numRideAlongs) : 0;
-
-        return {
-          houseFeeAmount,
-          dealerFeeAmount,
-          totalAfterFees: afterJobCost,
-          afterJobCost,
-          percentOfContract,
-          vetRate,
-          repRate,
-          perVetPayout,
-          perRepPayout,
-          rideAlongFeePerPerson,
-          creditCardFeePerPerson,
-          finalPerVetPayout,
-          finalPerRepPayout,
-          finalTotalVetsPayout,
-          finalTotalRepsPayout,
-          combinedPayout: finalTotalVetsPayout + finalTotalRepsPayout,
-          totalRideAlongPayout,
-          perRideAlongPayout
-        };
-      }
-
       function calculateTotals(){
         let totalVetPayout = 0;
         let totalRepPayout = 0;
@@ -304,10 +294,8 @@
           totalRideAlongPayout
         };
       }
-
       const totals = calculateTotals();
 
-      /* ---------- render ---------- */
       return (
         <div className="min-h-screen bg-gray-100 p-4">
           {/* Header & actions */}
@@ -340,14 +328,14 @@
                 </div>
               </div>
 
-              {/* All calculators */}
+              {/* Calculators */}
               {calculators.map((calc, index) => (
                 <CalculatorCard
                   key={calc.id}
                   calc={calc}
                   index={index}
                   calculators={calculators}
-                  setCalculators={(arr)=>setCalculators(arr)}
+                  setCalculators={setCalculators}
                   setPrintSingleCalc={setPrintSingleCalc}
                 />
               ))}
@@ -377,9 +365,6 @@
           {showReport && (
             <ReportView
               calculators={calculators}
-              calculateForOne={calculateForOne}
-              parseValue={parseValue}
-              formatCurrency={formatCurrency}
               onClose={()=>setShowReport(false)}
             />
           )}
@@ -388,14 +373,11 @@
             <SingleCalcPrint
               index={printSingleCalc}
               calculators={calculators}
-              calculateForOne={calculateForOne}
-              parseValue={parseValue}
-              formatCurrency={formatCurrency}
               onClose={()=>setPrintSingleCalc(null)}
             />
           )}
 
-          {/* Save/Delete/Saved Reports Modals */}
+          {/* Modals */}
           {showSaveDialog && (
             <Modal onClose={()=>{ setShowSaveDialog(false); setReportName(''); }}>
               <h2 className="text-2xl font-bold mb-4">Save Report</h2>
@@ -469,8 +451,7 @@
       );
     }
 
-    /* -------------------------- Components -------------------------- */
-
+    /* =========================== PRESENTATION COMPONENTS =========================== */
     const Modal = ({children, onClose, wide}) => (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className={`bg-white rounded-lg p-6 ${wide ? 'max-w-4xl' : 'max-w-md'} w-full max-h-screen overflow-y-auto`}>
@@ -481,14 +462,12 @@
         </div>
       </div>
     );
-
     const Card = ({color, title, value}) => (
       <div className={`bg-gradient-to-br ${color} p-6 rounded-lg shadow-lg text-white`}>
         <div className="text-sm font-bold mb-2">{title}</div>
         <div className="text-3xl font-bold">{value}</div>
       </div>
     );
-
     const Section = ({title, color, children}) => {
       const colors = {
         blue: 'bg-blue-50 border-blue-400',
@@ -505,7 +484,6 @@
         </div>
       );
     };
-
     const LabeledInput = ({label, value, onChange, placeholder}) => (
       <div>
         <label className="text-sm font-bold text-gray-700 mb-1 block">{label}</label>
@@ -538,12 +516,11 @@
       </div>
     );
 
+    /* ============================== CALCULATOR CARD ============================== */
     function CalculatorCard({ calc, index, calculators, setCalculators, setPrintSingleCalc }) {
       const data = calculateForOne(calc);
-
       function update(key, val){
         const arr = [...calculators];
-        // counts: also fit arrays
         if (key === 'numVets') {
           arr[index][key] = onlyInt(val);
           arr[index].vetNames = fitNamesArray(arr[index].vetNames, arr[index][key]);
@@ -558,11 +535,10 @@
         }
         setCalculators(arr);
       }
-
       function updateName(kind, i, val){
         const arr = [...calculators];
         const key = kind + 'Names';
-        arr[index][key] = fitNamesArray(arr[index][key], 
+        arr[index][key] = fitNamesArray(arr[index][key],
           kind === 'vet' ? arr[index].numVets :
           kind === 'rep' ? arr[index].numReps : arr[index].numRideAlongs
         );
@@ -778,8 +754,8 @@
       );
     }
 
-    /* -------------------- Print: Summary Report -------------------- */
-    function ReportView({calculators, calculateForOne, parseValue, formatCurrency, onClose}) {
+    /* ============================ PRINT: SUMMARY REPORT ============================ */
+    function ReportView({calculators, onClose}) {
       const hasVets = calculators.some(c => parseValue(c.numVets) > 0);
       const hasReps = calculators.some(c => parseValue(c.numReps) > 0);
       const hasRAs  = calculators.some(c => parseValue(c.numRideAlongs) > 0);
@@ -862,8 +838,8 @@
       );
     }
 
-    /* -------------------- Print: Single Calculator -------------------- */
-    function SingleCalcPrint({index, calculators, calculateForOne, parseValue, formatCurrency, onClose}) {
+    /* ============================ PRINT: SINGLE CALC ============================ */
+    function SingleCalcPrint({index, calculators, onClose}) {
       const calc = calculators[index];
       const c = calculateForOne(calc);
       const vets = fitNamesArray(calc.vetNames, calc.numVets);
@@ -940,9 +916,8 @@
       );
     }
 
-    /* Mount */
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
+    /* MOUNT */
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
