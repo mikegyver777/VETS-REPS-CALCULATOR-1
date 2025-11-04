@@ -5,41 +5,62 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>ALTA CAL PROFIT SHARE</title>
 
+  <!-- Mobile PWA feel on iOS (optional) -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- React UMD + Babel -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- React (production) + Babel -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
+    /* iOS friendliness */
+    html { -webkit-text-size-adjust: 100%; }
+    input, select, textarea, button { font-size: 16px; } /* prevent iOS zoom */
+    * { -webkit-tap-highlight-color: transparent; }
+
     .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55);
       display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
     .paper { background: #fff; border-radius: .5rem; padding: 1rem; max-height: 90vh; overflow: auto; }
+    .paper { -webkit-overflow-scrolling: touch; }
 
-    /* PRINT: show ONLY the individual sheet, big readable text, one page */
+    /* Force header buttons to wrap on iPhone/iPad so nothing disappears */
+    @media (max-width: 640px) {
+      .header-buttons { flex-wrap: wrap !important; gap: 6px !important; justify-content: flex-start !important; }
+      .header-buttons button { flex: 1 1 100%; min-width: 160px; }
+      .title-mobile { margin-bottom: .5rem; }
+    }
+
+    /* PRINT: isolate current overlay (individual or report) */
     @media print {
       @page { size: letter portrait; margin: 0.5in; }
-      /* Hide everything globally... */
       body * { visibility: hidden !important; }
-      /* ...except the selected print area */
       .print-area, .print-area * { visibility: visible !important; }
       .print-area { position: static !important; background: #fff !important; }
 
-      /* Fit to page width with comfortable margins */
       .paper { width: 7.75in !important; max-height: unset !important; overflow: visible !important;
                padding: 0 !important; border: none !important; border-radius: 0 !important; }
 
-      /* Larger, accountant-friendly typography */
-      .print-block { font-size: 14px; line-height: 1.45; }
-      .print-title { font-size: 22px !important; margin-bottom: 12px !important; }
-      .print-subtitle { font-size: 16px !important; }
-      .print-table th, .print-table td { font-size: 13px !important; padding: 6px 8px !important; }
+      /* Typography for readability */
+      .print-lg   { font-size: 22px !important; }
+      .print-md   { font-size: 16px !important; }
+      .print-sm   { font-size: 13px !important; }
       .print-chip { font-size: 14px !important; padding: 6px 8px !important; }
 
-      /* Ensure exactly one page for the individual sheet; avoid awkward breaks */
       .print-section { page-break-inside: avoid; }
+      .report-page   { page-break-after: always; }
+      .report-table th, .report-table td { font-size: 12px !important; padding: 6px 8px !important; }
+    }
+
+    /* iOS Safari sometimes ignores @page; fallback margins */
+    @supports (-webkit-touch-callout: none) {
+      @media print {
+        @page { size: auto; margin: 12mm; }
+        .paper { width: auto !important; margin: 0 !important; }
+      }
     }
   </style>
 </head>
@@ -142,6 +163,9 @@
     const Plus = ({size=20}) => (
       <Icon size={size}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>
     );
+    const X = ({size=20}) => (
+      <Icon size={size}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>
+    );
 
     /* ================= App ================= */
     function App(){
@@ -160,8 +184,9 @@
 
       const [rows, setRows] = React.useState([ blank() ]);
       const [printIndex, setPrintIndex] = React.useState(null);
+      const [showReport, setShowReport] = React.useState(false);
 
-      /* Safety net: fill House % when empty & not manual */
+      /* Ensure House % auto when not manual */
       React.useEffect(()=>{
         setRows(prev=>{
           let changed=false;
@@ -219,10 +244,14 @@
       return (
         <div className="max-w-6xl mx-auto p-4">
           <div className="bg-white border-4 border-blue-500 rounded-lg p-4 mb-4">
-            <div className="flex items-center justify-between">
-              <h1 className="text-2xl font-bold text-blue-800">ALTA CAL PROFIT SHARE</h1>
-              <div className="flex gap-2">
-                <button className="bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2"
+            <div className="flex items-center justify-between flex-wrap">
+              <h1 className="text-2xl font-bold text-blue-800 title-mobile">ALTA CAL PROFIT SHARE</h1>
+              <div className="flex gap-2 header-buttons">
+                <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
+                        onClick={()=>setShowReport(true)}>
+                  <Printer/> Print Report
+                </button>
+                <button className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
                         onClick={()=>setRows(r=>[...r, blank()])}>
                   <Plus/> Add File
                 </button>
@@ -305,11 +334,13 @@
           })}
 
           {printIndex!==null && <PrintOne row={rows[printIndex]} index={printIndex} onClose={()=>setPrintIndex(null)}/>}
+
+          {showReport && <ReportOverlay rows={rows} onClose={()=>setShowReport(false)}/>}
         </div>
       );
     }
 
-    /* ============== Small UI bits ============== */
+    /* ===== UI bits ===== */
     const Labeled = ({label,value,onChange}) => (
       <div>
         <label className="text-xs font-bold block mb-1">{label}</label>
@@ -385,7 +416,7 @@
       );
     }
 
-    /* ============== PRINT: INDIVIDUAL ONLY (fills one page, no profit, no UI above) ============== */
+    /* ====== PRINT: Individual calculator only (no profit) ====== */
     function PrintOne({row, index, onClose}){
       const c   = calcOne(row);
       const vets= fit(row.vetNames, row.numVets);
@@ -394,9 +425,9 @@
 
       return (
         <div className="overlay print-area">
-          <div className="paper print-block w-full max-w-[7.9in]">
+          <div className="paper w-full max-w-[7.9in]">
             <div className="print-section">
-              <h2 className="print-title font-bold text-center mb-3">ALTA CAL — CALCULATOR #{index+1}</h2>
+              <h2 className="font-bold text-center mb-3 print-lg">ALTA CAL — CALCULATOR #{index+1}</h2>
 
               <div className="mb-3 grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded border">
                 <div><span className="font-semibold">Customer:</span> <span className="font-semibold">{row.customerName || 'N/A'}</span></div>
@@ -404,8 +435,8 @@
               </div>
 
               <div className="mb-4 bg-blue-50 border-2 border-blue-400 rounded p-3">
-                <h3 className="print-subtitle font-bold mb-2">CONTRACT & FEE BREAKDOWN</h3>
-                <div className="grid grid-cols-2 gap-2">
+                <h3 className="font-bold mb-2 print-md">CONTRACT & FEE BREAKDOWN</h3>
+                <div className="grid grid-cols-2 gap-2 print-sm">
                   <div><strong>Contract:</strong> {fmt(c.contract)}</div>
                   <div><strong>House Fee %:</strong> {c.housePct || 0}% &nbsp; (<strong>Amt:</strong> {fmt(c.houseFee)})</div>
                   <div><strong>Finance Amount:</strong> {fmt(c.finance)}</div>
@@ -433,7 +464,7 @@
               </div>
 
               {num(row.numVets)>0 && (
-                <div className="mb-3">
+                <div className="mb-3 print-sm">
                   <div className="font-bold mb-1">Vets (Per: {fmt(c.perVet)})</div>
                   {vets.map((n,i)=>(
                     <div key={i} className="flex justify-between border-b py-1">
@@ -445,7 +476,7 @@
               )}
 
               {num(row.numReps)>0 && (
-                <div className="mb-3">
+                <div className="mb-3 print-sm">
                   <div className="font-bold mb-1">Reps (Per: {fmt(c.perRep)})</div>
                   {reps.map((n,i)=>(
                     <div key={i} className="flex justify-between border-b py-1">
@@ -457,9 +488,9 @@
               )}
 
               {num(row.numRideAlongs)>0 && (
-                <div className="mb-3">
+                <div className="mb-3 print-sm">
                   <div className="font-bold mb-1">Ride Alongs (Per: {fmt(c.perRA)})</div>
-                  {ras.map((n,i)=>(
+                  {fit(row.rideAlongNames,row.numRideAlongs).map((n,i)=>(
                     <div key={i} className="flex justify-between border-b py-1">
                       <span>{n || `Ride Along ${i+1}`}</span><span className="font-semibold">{fmt(c.perRA)}</span>
                     </div>
@@ -485,6 +516,133 @@
               <button className="bg-gray-600 text-white px-4 py-2 rounded" onClick={onClose}>CLOSE</button>
             </div>
           </div>
+        </div>
+      );
+    }
+
+    /* ====== REPORT: combined sheet with per-person totals (no profit) ====== */
+    function ReportOverlay({rows, onClose}){
+      // aggregate per-person totals across all files
+      const add = (map, name, amount) => {
+        const key = (name||'').trim() || '(Unnamed)';
+        map.set(key, (map.get(key)||0) + (amount||0));
+      };
+
+      const grand = { vets:new Map(), reps:new Map(), ras:new Map() };
+
+      const tableRows = rows.map((r, i) => {
+        const c = calcOne(r);
+        const vets = fit(r.vetNames, r.numVets);
+        const reps = fit(r.repNames, r.numReps);
+        const ras  = fit(r.rideAlongNames, r.numRideAlongs);
+
+        // accumulate
+        vets.forEach(n => add(grand.vets, n, c.perVet));
+        reps.forEach(n => add(grand.reps, n, c.perRep));
+        ras .forEach(n => add(grand.ras , n, c.perRA));
+
+        return { i, r, c, vets, reps, ras };
+      });
+
+      const totVet   = [...grand.vets.values()].reduce((a,b)=>a+b,0);
+      const totRep   = [...grand.reps.values()].reduce((a,b)=>a+b,0);
+      const totRA    = [...grand.ras.values()].reduce((a,b)=>a+b,0);
+      const totComb  = totVet + totRep;
+
+      return (
+        <div className="overlay print-area">
+          <div className="paper w-full max-w-[8.1in]">
+            <div className="report-page">
+              <h2 className="font-bold text-center mb-3 print-lg">ALTA CAL — PAYOUT REPORT</h2>
+
+              <table className="w-full border-2 border-black report-table">
+                <thead>
+                  <tr className="bg-blue-200 border-b-2 border-black">
+                    <th className="border border-black text-left">#</th>
+                    <th className="border border-black text-left">Customer</th>
+                    <th className="border border-black text-left">Job#</th>
+                    <th className="border border-black text-right">Vets</th>
+                    <th className="border border-black text-right">Per Vet</th>
+                    <th className="border border-black text-right">Total Vet</th>
+                    <th className="border border-black text-right">Reps</th>
+                    <th className="border border-black text-right">Per Rep</th>
+                    <th className="border border-black text-right">Total Rep</th>
+                    <th className="border border-black text-right">RAs</th>
+                    <th className="border border-black text-right">Per RA</th>
+                    <th className="border border-black text-right">Total RA</th>
+                    <th className="border border-black text-right bg-green-200">Combined</th>
+                    <th className="border border-black text-right bg-blue-100">After Fees</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableRows.map(({i,r,c})=>(
+                    <tr key={i} className="border-b border-gray-400">
+                      <td className="border border-black p-1">{i+1}</td>
+                      <td className="border border-black p-1">{r.customerName || 'N/A'}</td>
+                      <td className="border border-black p-1">{r.jobNumber || 'N/A'}</td>
+                      <td className="border border-black p-1 text-right">{num(r.numVets)||''}</td>
+                      <td className="border border-black p-1 text-right">{num(r.numVets)?fmt(c.perVet):''}</td>
+                      <td className="border border-black p-1 text-right bg-green-50 font-bold">{num(r.numVets)?fmt(c.totalVets):''}</td>
+                      <td className="border border-black p-1 text-right">{num(r.numReps)||''}</td>
+                      <td className="border border-black p-1 text-right">{num(r.numReps)?fmt(c.perRep):''}</td>
+                      <td className="border border-black p-1 text-right bg-purple-50 font-bold">{num(r.numReps)?fmt(c.totalReps):''}</td>
+                      <td className="border border-black p-1 text-right">{num(r.numRideAlongs)||''}</td>
+                      <td className="border border-black p-1 text-right">{num(r.numRideAlongs)?fmt(c.perRA):''}</td>
+                      <td className="border border-black p-1 text-right bg-red-50 font-bold">{num(r.numRideAlongs)?fmt(c.rideAlongTotal):''}</td>
+                      <td className="border border-black p-1 text-right bg-green-200 font-bold">{fmt(c.combined)}</td>
+                      <td className="border border-black p-1 text-right bg-blue-100 font-bold">{fmt(c.afterFees)}</td>
+                    </tr>
+                  ))}
+
+                  <tr className="bg-yellow-100 font-bold border-t-4 border-black">
+                    <td colSpan="5" className="border border-black p-1 text-right">TOTALS:</td>
+                    <td className="border border-black p-1 text-right bg-green-100">{fmt(totVet)}</td>
+                    <td colSpan="2" className="border border-black p-1"></td>
+                    <td className="border border-black p-1 text-right bg-purple-100">{fmt(totRep)}</td>
+                    <td colSpan="2" className="border border-black p-1"></td>
+                    <td className="border border-black p-1 text-right bg-red-100">{fmt(totRA)}</td>
+                    <td className="border border-black p-1 text-right bg-green-300">{fmt(totComb)}</td>
+                    <td className="border border-black p-1 text-right bg-blue-200"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="report-page">
+              <h3 className="font-bold mb-2 print-md">Grand Totals by Person</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <TotalsByPerson title="Vets" map={grand.vets} color="green"/>
+                <TotalsByPerson title="Reps" map={grand.reps} color="purple"/>
+                <TotalsByPerson title="Ride Alongs" map={grand.ras} color="red"/>
+              </div>
+            </div>
+
+            <div className="no-print flex justify-center gap-2 mt-4">
+              <button className="bg-blue-600 text-white px-4 py-2 rounded" onClick={()=>window.print()}>PRINT REPORT</button>
+              <button className="bg-gray-600 text-white px-4 py-2 rounded" onClick={onClose}>CLOSE</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function TotalsByPerson({title, map, color}){
+      const colorCls = {
+        green:'border-green-600', purple:'border-purple-600', red:'border-red-600'
+      }[color] || 'border-gray-600';
+      const list = [...map.entries()].sort((a,b)=>b[1]-a[1]);
+      return (
+        <div className={`border-2 ${colorCls} rounded p-3`}>
+          <div className="font-bold mb-2">{title}</div>
+          {list.length===0 ? <div className="text-gray-500">None</div> : (
+            <div className="space-y-1">
+              {list.map(([name,amt],i)=>(
+                <div key={i} className="flex justify-between border-b py-1">
+                  <span>{name}</span><span className="font-semibold">{fmt(amt)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       );
     }
