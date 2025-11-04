@@ -7,16 +7,10 @@
 
   <!-- iOS niceties -->
   <meta name="apple-mobile-web-app-capable" content="yes">
-
-  <!-- Tailwind (pinned) -->
-  <script src="https://cdn.tailwindcss.com/3.4.13"></script>
-
-  <!-- React 18 UMD (pinned) -->
-  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-
-  <!-- Babel Standalone (pinned) for in-browser JSX -->
-  <script src="https://unpkg.com/@babel/standalone@7.25.7/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
     html { -webkit-text-size-adjust: 100%; }
@@ -30,13 +24,9 @@
   </style>
 </head>
 <body class="bg-gray-100">
-  <noscript style="display:block;padding:12px;background:#7f1d1d;color:#fff;text-align:center">
-    JavaScript is required to run this calculator.
-  </noscript>
   <div id="root"></div>
 
   <script type="text/babel" data-presets="env,react">
-    /* ========= Helpers ========= */
     const fmt = n => new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format((+n)||0);
     const num = s => { const x=parseFloat(String(s??'').replace(/[,$]/g,'')); return Number.isFinite(x)?x:0; };
     const onlyNum = s => (s||'').replace(/[^0-9.]/g,'');
@@ -49,17 +39,9 @@
       return base;
     };
 
-    /* ========= Core Math =========
-       Dealer Fee = Contract - Net
-       Total After Fees = (Contract - HouseAmt) - Labor - DealerFee - RideAlong
-       Margin% = AfterFees / (Contract - HouseAmt)
-       Tiers (margin%):
-         Reps: >=50 -> 40%; 40–49.99 -> 30%; 33–39 -> 25%; <=33 -> 20%
-         Vets: >=50 -> 55%; 40–49.99 -> 45%; 33–39 -> 35%; <=33 -> 25%
-    */
     function calcOne(d){
       const contract = num(d.contractAmount);
-      const net      = Math.min(num(d.netAmount)||0, contract||0);
+      const net      = Math.min(num(d.netAmount)||0, contract||0);  // clamp to contract
       const houseAmt = Math.min(num(d.houseFeeAmount)||0, contract||0);
       const labor    = num(d.laborMaterial);
       const ride     = num(d.rideAlong);
@@ -69,24 +51,27 @@
 
       const afterHouse = contract - houseAmt;
       const afterFees  = afterHouse - labor - dealerFeeAmt - ride;
-      const marginPct  = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
 
+      const marginPct = afterHouse>0 ? (afterFees/afterHouse)*100 : 0;
+
+      // Tier schedules (unchanged)
       let vetRate=25, repRate=20;
       if (marginPct>=50){ vetRate=55; repRate=40; }
       else if (marginPct>=40){ vetRate=45; repRate=30; }
       else if (marginPct>=33){ vetRate=35; repRate=25; }
 
-      const vets   = num(d.numVets);
-      const reps   = num(d.numReps);
+      const vets = num(d.numVets), reps = num(d.numReps);
       const people = vets + reps;
 
-      const base    = Math.max(afterFees,0);
+      // Pools from AfterFees
+      const base = Math.max(afterFees,0);
       const vetPool = base*(vetRate/100);
       const repPool = base*(repRate/100);
 
-      const perVet  = people>0 ? vetPool/people : 0;
-      const perRep  = people>0 ? repPool/people : 0;
+      const perVet = people>0 ? vetPool/people : 0;
+      const perRep = people>0 ? repPool/people : 0;
 
+      // Ride-along payout is informational (already subtracted in AfterFees)
       const raCount = num(d.numRideAlongs);
       const perRA   = raCount>0 ? (ride/raCount) : 0;
 
@@ -103,28 +88,17 @@
       };
     }
 
-    /* ========= Icons ========= */
+    /* ---------- Icons ---------- */
     const Icon = ({children,size=18}) => (
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         {children}
       </svg>
     );
-    const Printer = () => (
-      <Icon>
-        <polyline points="6 9 6 2 18 2 18 9"></polyline>
-        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-        <rect x="6" y="14" width="12" height="8"></rect>
-      </Icon>
-    );
-    const Plus = () => (
-      <Icon>
-        <line x1="12" y1="5" x2="12" y2="19"/>
-        <line x1="5" y1="12" x2="19" y2="12"/>
-      </Icon>
-    );
+    const Printer = () => (<Icon><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></Icon>);
+    const Plus    = () => (<Icon><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>);
 
-    /* ========= Print helpers ========= */
+    /* ---------- Print helpers (new window) ---------- */
     function openPrintWindow(html, title='Print'){
       const win = window.open('', '_blank');
       if(!win){ alert('Pop-up blocked. Allow pop-ups for printing.'); return; }
@@ -150,9 +124,10 @@
         </style>
       </head><body>${html}</body></html>`);
       win.document.close();
-      setTimeout(()=>{ try{ win.focus(); win.print(); }catch(e){} }, 60);
+      setTimeout(()=>{ win.focus(); win.print(); }, 50);
     }
 
+    /* ---------- Build print HTML ---------- */
     function buildSingleHTML(row, index){
       const c = calcOne(row);
       const vets = fit(row.vetNames,row.numVets);
@@ -283,14 +258,13 @@
         </div>`;
     }
 
-    /* ========= UI Components ========= */
+    /* ---------- Components ---------- */
     const Labeled = ({label,value,onChange}) => (
       <div>
         <label className="text-xs font-bold block mb-1">{label}</label>
         <input className="w-full border-2 rounded px-2 py-2" value={value||''} onChange={e=>onChange(e.target.value)}/>
       </div>
     );
-
     const Money = ({label,value,onChange,onBlur}) => (
       <div>
         <label className="text-xs font-bold block mb-1">{label}</label>
@@ -300,7 +274,6 @@
         </div>
       </div>
     );
-
     const Stat = ({title,value}) => (
       <div className="border-2 rounded p-3 text-center">
         <div className="text-xs font-bold mb-1">{title}</div>
@@ -332,7 +305,6 @@
       );
     }
 
-    /* ========= App ========= */
     function App(){
       const blank = () => ({
         id: Date.now()+Math.random(),
@@ -381,8 +353,8 @@
         });
       };
 
-      const printOne    = (idx)=> openPrintWindow(buildSingleHTML(rows[idx], idx), `Calculator #${idx+1}`);
-      const printReport = ()=> openPrintWindow(buildReportHTML(rows), 'Payout Report');
+      const printOne   = (idx)=> openPrintWindow(buildSingleHTML(rows[idx], idx), `Calculator #${idx+1}`);
+      const printReport= ()=> openPrintWindow(buildReportHTML(rows), 'Payout Report');
 
       return (
         <div className="max-w-6xl mx-auto p-4">
