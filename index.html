@@ -8,48 +8,39 @@
   <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- React (UMD) -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- React + ReactDOM (dev UMD for iOS friendliness) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+  <!-- Babel so JSX works on static hosting (GitHub Pages) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
-    html { -webkit-text-size-adjust: 100%; }
-    * { -webkit-tap-highlight-color: transparent; }
-    input, button { font-size: 16px; } /* iOS focus fix */
+    html{ -webkit-text-size-adjust:100% }
+    *{ -webkit-tap-highlight-color:transparent }
+    input,button{ font-size:16px } /* iOS cursor bug fix */
 
-    .pill{border-width:2px;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;gap:12px;background:#fff}
-    .pill-purple{border-color:#7c3aed}.pill-purple .amt{color:#7c3aed;font-weight:800}
-    .pill-red{border-color:#ef4444}.pill-red .amt{color:#ef4444;font-weight:800}
+    /* Pills for names + amount */
+    .pill{border:2px solid #7c3aed;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;gap:12px;background:#fff}
+    .pill .amt{color:#7c3aed;font-weight:800}
+    .pill.ra{border-color:#ef4444}
+    .pill.ra .amt{color:#ef4444}
 
-    .role-header{display:flex;align-items:center;gap:8px;font-weight:800;text-transform:uppercase}
-    .role-vet{color:#065f46}     /* green-800 */
-    .role-rep{color:#4c1d95}     /* purple-900 */
-    .role-ra {color:#7f1d1d}     /* red-900  */
-    .role-band{height:6px;border-radius:9999px;margin:8px 0}
-    .band-vet{background:#10b981}   /* emerald-500 */
-    .band-rep{background:#a78bfa}   /* violet-300 */
-    .band-ra {background:#f87171}   /* red-400 */
-
+    /* Print rules */
     @media print{
-      @page { size: legal; margin: 0.5in; }
-      body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-      .no-print{display:none!important}
-      .print-page{page-break-after:always}
-      .print h1{font-size:22px;margin:0 0 10px;text-align:center;border-bottom:3px solid #000;padding-bottom:6px}
-      .print h2{font-size:16px;margin:10px 0 6px}
-      .print table{width:100%;border-collapse:collapse}
-      .print th,.print td{border:1px solid #000;padding:6px 8px;font-size:14px}
-      .right{text-align:right}
+      @page{ size:legal; margin:0.5in }
+      body{ print-color-adjust:exact; -webkit-print-color-adjust:exact }
+      .no-print{ display:none !important }
     }
   </style>
 </head>
 <body class="bg-gray-100">
   <div id="root"></div>
 
-  <script>
+  <script type="text/babel">
     const { useState, useMemo } = React;
-    const h = React.createElement;
 
+    /* ---------- Helpers ---------- */
     const num = v => {
       const x = parseFloat(String(v ?? '').replace(/[,$]/g,''));
       return Number.isFinite(x) ? x : 0;
@@ -63,6 +54,14 @@
       if (a <= 20000) return 10;
       if (a <= 30000) return 9;
       return 8;
+    };
+
+    const fit = (arr, count) => {
+      const c = Math.max(0, parseInt(count||0,10)||0);
+      const base = Array.isArray(arr) ? [...arr] : [];
+      if (base.length > c) return base.slice(0,c);
+      while (base.length < c) base.push('');
+      return base;
     };
 
     function tierRates(afterFees, afterHouse){
@@ -121,96 +120,98 @@
       };
     }
 
-    const fit = (arr, count) => {
-      const c = Math.max(0, parseInt(count||0,10)||0);
-      const base = Array.isArray(arr) ? [...arr] : [];
-      if (base.length > c) return base.slice(0,c);
-      while (base.length < c) base.push('');
-      return base;
-    };
-
+    /* ---------- Print builders (legal size, no profit, no blank pages) ---------- */
     function openPrint(html,title){
       const w = window.open('', '_blank');
-      if(!w){ alert('Pop-up blocked. Allow pop-ups for this site.'); return; }
+      if(!w){ alert('Pop-up blocked. Allow pop-ups.'); return; }
       w.document.open();
-      w.document.write(
-        '<!doctype html><html><head><meta charset="utf-8"><title>'+title+
-        '</title><style>@page{size:legal;margin:0.5in}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}'+
-        '.print-page{page-break-after:always}.print h1{font-size:22px;margin:0 0 10px;text-align:center;border-bottom:3px solid #000;padding-bottom:6px}'+
-        '.print h2{font-size:16px;margin:10px 0 6px}.print table{width:100%;border-collapse:collapse}.print th,.print td{border:1px solid #000;padding:6px 8px;font-size:14px}.right{text-align:right}.top-pad{margin-top:12mm}</style></head><body class="print">'+
-        html+'</body></html>'
-      );
+      w.document.write(`<!doctype html>
+<html><head><meta charset="utf-8"><title>${title}</title>
+<style>
+@page{size:legal;margin:0.5in}
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+h1{font-size:22px;margin:0 0 10px;text-align:center;border-bottom:3px solid #000;padding-bottom:6px}
+h2{font-size:15px;margin:12px 0 6px}
+table{width:100%;border-collapse:collapse}
+th,td{border:1px solid #000;padding:6px 8px;font-size:14px}
+.right{text-align:right}
+.top-pad{margin-top:12mm}
+.page{page-break-after:always}
+</style></head><body>${html}</body></html>`);
       w.document.close();
-      setTimeout(()=>{ w.focus(); w.print(); }, 80);
+      setTimeout(()=>{ try{w.focus(); w.print();}catch(e){} }, 80);
     }
 
-    /* -------- Individual print (no big title; top padding) -------- */
     function buildSingle(row, idx){
       const c = compute(row);
       const vetNames = fit(row.vetNames, row.numVets);
       const repNames = fit(row.repNames, row.numReps);
       const raNames  = fit(row.rideAlongNames, row.numRideAlongs);
 
-      const peopleBlock = (title, per, list) => list.length ? (
-        '<h2>'+title+' (Per: '+fmt(per)+')</h2>'+
-        '<table><thead><tr><th>Name</th><th>Payout</th></tr></thead><tbody>'+
-        list.map(n=>'<tr><td>'+ (String(n||'').trim()) +'</td><td class="right">'+fmt(per)+'</td></tr>').join('')+
-        '</tbody></table>'
-      ) : '';
+      const block = (title, per, list) => list.length ? `
+        <h2>${title} (Per: ${fmt(per)})</h2>
+        <table><thead><tr><th>Name</th><th>Payout</th></tr></thead>
+        <tbody>${list.map(n=>`<tr><td>${(n||'').toString().trim()}</td><td class="right">${fmt(per)}</td></tr>`).join('')}</tbody></table>
+      ` : '';
 
-      return (
-        '<div class="print-page top-pad">'+
-          '<table style="margin-bottom:8px"><tbody>'+
-            '<tr><th>Customer</th><td>'+ (String(row.customerName||'').trim()||'N/A') +'</td></tr>'+
-            '<tr><th>Job#</th><td>'+ (String(row.jobNumber||'').trim()||'N/A') +'</td></tr>'+
-          '</tbody></table>'+
+      return `
+        <div class="page top-pad">
+          <table style="margin-bottom:8px">
+            <tbody>
+              <tr><th>Customer</th><td>${(row.customerName||'').toString().trim()||'N/A'}</td></tr>
+              <tr><th>Job#</th><td>${(row.jobNumber||'').toString().trim()||'N/A'}</td></tr>
+            </tbody>
+          </table>
 
-          '<h2>CONTRACT & FEE BREAKDOWN</h2>'+
-          '<table style="margin-bottom:12px"><tbody>'+
-            '<tr><th>Contract</th><td>'+fmt(c.contract)+'</td></tr>'+
-            '<tr><th>Finance Amount</th><td>'+fmt(c.finance)+'</td></tr>'+
-            '<tr><th>Credit Card</th><td>'+fmt(c.credit)+'</td></tr>'+
-            '<tr><th>Labor & Material</th><td>'+fmt(c.labor)+'</td></tr>'+
-            '<tr><th>House Fee %</th><td>'+c.housePct+'% (Amt: '+fmt(c.houseFee)+')</td></tr>'+
-            '<tr><th>Dealer Fee %</th><td>'+c.dealerPct+'% (Amt: '+fmt(c.dealerFeeAmt)+')</td></tr>'+
-            '<tr><th>CC Fee %</th><td>'+c.ccPct+'% (Amt: '+fmt(c.ccFeeAmt)+')</td></tr>'+
-            '<tr><th>Total After Fees</th><td>'+fmt(c.afterFees)+'</td></tr>'+
-          '</tbody></table>'+
+          <h2>CONTRACT & FEE BREAKDOWN</h2>
+          <table style="margin-bottom:10px">
+            <tbody>
+              <tr><th>Contract</th><td>${fmt(c.contract)}</td></tr>
+              <tr><th>Finance Amount</th><td>${fmt(c.finance)}</td></tr>
+              <tr><th>Credit Card</th><td>${fmt(c.credit)}</td></tr>
+              <tr><th>Labor & Material</th><td>${fmt(c.labor)}</td></tr>
+              <tr><th>House Fee %</th><td>${c.housePct}% (Amt: ${fmt(c.houseFee)})</td></tr>
+              <tr><th>Dealer Fee %</th><td>${c.dealerPct}% (Amt: ${fmt(c.dealerFeeAmt)})</td></tr>
+              <tr><th>CC Fee %</th><td>${c.ccPct}% (Amt: ${fmt(c.ccFeeAmt)})</td></tr>
+              <tr><th>Total After Fees</th><td>${fmt(c.afterFees)}</td></tr>
+            </tbody>
+          </table>
 
-          '<table style="margin-bottom:12px"><thead><tr><th>VETS %</th><th>REPS %</th><th>MARGIN %</th></tr></thead>'+
-          '<tbody><tr><td>'+c.vetPct+'%</td><td>'+c.repPct+'%</td><td>'+ (c.afterHouse>0 ? ( (c.afterFees/c.afterHouse)*100 ).toFixed(1) : '0.0') +'%</td></tr></tbody></table>'+
+          <table style="margin-bottom:12px">
+            <thead><tr><th>VETS %</th><th>REPS %</th><th>MARGIN %</th></tr></thead>
+            <tbody><tr><td>${c.vetPct}%</td><td>${c.repPct}%</td><td>${c.afterHouse>0?((c.afterFees/c.afterHouse)*100).toFixed(1):'0.0'}%</td></tr></tbody>
+          </table>
 
-          peopleBlock('VETS', c.perVet, vetNames) +
-          peopleBlock('REPS', c.perRep, repNames) +
-          peopleBlock('RIDE ALONGS', c.perRA, raNames) +
-        '</div>'
-      );
+          ${block('VETS', c.perVet, vetNames)}
+          ${block('REPS', c.perRep, repNames)}
+          ${block('RIDE ALONGS', c.perRA, raNames)}
+        </div>
+      `;
     }
 
-    /* -------- Report print (with per-person totals) -------- */
     function buildReport(rows){
       const fileRows = rows.map((row,i)=>{
         const c = compute(row);
         const v = num(row.numVets), r = num(row.numReps), ra = num(row.numRideAlongs);
-        return '<tr>'+
-          '<td>'+(i+1)+'</td>'+
-          '<td>'+(String(row.customerName||'').trim()||'N/A')+'</td>'+
-          '<td>'+(String(row.jobNumber||'').trim()||'N/A')+'</td>'+
-          '<td class="right">'+(v||'')+'</td>'+
-          '<td class="right">'+(v?fmt(c.perVet):'')+'</td>'+
-          '<td class="right">'+(v?fmt(c.perVet*v):'')+'</td>'+
-          '<td class="right">'+(r||'')+'</td>'+
-          '<td class="right">'+(r?fmt(c.perRep):'')+'</td>'+
-          '<td class="right">'+(r?fmt(c.perRep*r):'')+'</td>'+
-          '<td class="right">'+(ra||'')+'</td>'+
-          '<td class="right">'+(ra?fmt(c.perRA):'')+'</td>'+
-          '<td class="right">'+(ra?fmt(c.perRA*ra):'')+'</td>'+
-        '</tr>';
+        return `<tr>
+          <td>${i+1}</td>
+          <td>${(row.customerName||'').toString().trim()||'N/A'}</td>
+          <td>${(row.jobNumber||'').toString().trim()||'N/A'}</td>
+          <td class="right">${v||''}</td>
+          <td class="right">${v?fmt(c.perVet):''}</td>
+          <td class="right">${v?fmt(c.perVet*v):''}</td>
+          <td class="right">${r||''}</td>
+          <td class="right">${r?fmt(c.perRep):''}</td>
+          <td class="right">${r?fmt(c.perRep*r):''}</td>
+          <td class="right">${ra||''}</td>
+          <td class="right">${ra?fmt(c.perRA):''}</td>
+          <td class="right">${ra?fmt(c.perRA*ra):''}</td>
+        </tr>`;
       }).join('');
 
       const totals = {};
       const add = (name, amt) => {
-        const key = String(name||'').trim() || '(Unnamed)';
+        const key = (name||'').toString().trim() || '(Unnamed)';
         totals[key] = (totals[key]||0) + (amt||0);
       };
       rows.forEach(row=>{
@@ -219,86 +220,91 @@
         fit(row.repNames,row.numReps).forEach(nm=>add(nm,c.perRep));
         fit(row.rideAlongNames,row.numRideAlongs).forEach(nm=>add(nm,c.perRA));
       });
-      const people = Object.entries(totals).sort((a,b)=>a[0].localeCompare(b[0]));
-      const peopleRows = people.map(([nm,amt])=>'<tr><td>'+nm+'</td><td class="right">'+fmt(amt)+'</td></tr>').join('') || '<tr><td colspan="2">(No names)</td></tr>';
+      const peopleRows = Object.entries(totals)
+        .sort((a,b)=>a[0].localeCompare(b[0]))
+        .map(([nm,amt])=>`<tr><td>${nm}</td><td class="right">${fmt(amt)}</td></tr>`)
+        .join('') || '<tr><td colspan="2">(No names)</td></tr>';
 
-      return (
-        '<div class="print-page">'+
-          '<h1>ALTA CAL PROFIT SHARE — PAYOUT REPORT</h1>'+
-          '<table>'+
-            '<thead><tr>'+
-              '<th>#</th><th>Customer</th><th>Job#</th>'+
-              '<th>Vets</th><th>Per Vet</th><th>Total Vets</th>'+
-              '<th>Reps</th><th>Per Rep</th><th>Total Reps</th>'+
-              '<th>RAs</th><th>Per RA</th><th>Total RA</th>'+
-            '</tr></thead>'+
-            '<tbody>'+fileRows+'</tbody>'+
-          '</table>'+
-          '<h2>TOTAL BY PERSON (ALL FILES)</h2>'+
-          '<table><thead><tr><th>Person</th><th>Amount</th></tr></thead>'+
-            '<tbody>'+peopleRows+'</tbody></table>'+
-        </div>'
-      );
+      return `
+        <div class="page">
+          <h1>ALTA CAL PROFIT SHARE — PAYOUT REPORT</h1>
+          <table>
+            <thead><tr>
+              <th>#</th><th>Customer</th><th>Job#</th>
+              <th>Vets</th><th>Per Vet</th><th>Total Vets</th>
+              <th>Reps</th><th>Per Rep</th><th>Total Reps</th>
+              <th>RAs</th><th>Per RA</th><th>Total RA</th>
+            </tr></thead>
+            <tbody>${fileRows}</tbody>
+          </table>
+
+          <h2 style="margin-top:14px">TOTAL BY PERSON (ALL FILES)</h2>
+          <table><thead><tr><th>Person</th><th>Amount</th></tr></thead>
+            <tbody>${peopleRows}</tbody></table>
+        </div>
+      `;
     }
 
-    /* -------- UI primitives -------- */
-    const Label = (t)=>h('label',{className:'text-xs font-bold text-black block mb-1 uppercase tracking-wide'},t);
-    const Input = (props)=>h('input', Object.assign({
-      className:'w-full px-2 py-2 border-2 border-black rounded focus:outline-none'
-    }, props));
-    const MoneyInput = ({label,value,onChange}) => h('div',{},[
-      Label(label),
-      h('div',{className:'flex items-center bg-white border-2 border-black rounded px-2 py-2'},[
-        h('span',{className:'mr-1'},'$'),
-        Input({type:'text', inputMode:'decimal', value:value||'', onChange:(e)=>onChange(onlyNum(e.target.value)), style:{textAlign:'right'}})
-      ])
-    ]);
-    const PercentInput = ({label,value,onChange}) => h('div',{},[
-      Label(label),
-      h('div',{className:'flex items-center bg-white border-2 border-black rounded px-2 py-2'},[
-        Input({type:'text', inputMode:'decimal', value:value||'', onChange:(e)=>onChange(onlyNum(e.target.value)), style:{textAlign:'right'}}),
-        h('span',{className:'ml-2'},'%')
-      ])
-    ]);
+    /* ---------- Small UI bits ---------- */
+    const Label = (t)=><label className="text-xs font-bold text-black block mb-1 uppercase tracking-wide">{t}</label>;
+    const Input = (props)=><input {...props} className={`w-full px-2 py-2 border-2 border-black rounded focus:outline-none ${props.className||''}`}/>;
+    const MoneyInput = ({label,value,onChange}) => (
+      <div>
+        <Label>{label}</Label>
+        <div className="flex items-center bg-white border-2 border-black rounded px-2 py-2">
+          <span className="mr-1">$</span>
+          <Input type="text" inputMode="decimal" value={value||''} onChange={e=>onChange(onlyNum(e.target.value))} style={{textAlign:'right'}}/>
+        </div>
+      </div>
+    );
+    const PercentInput = ({label,value,onChange}) => (
+      <div>
+        <Label>{label}</Label>
+        <div className="flex items-center bg-white border-2 border-black rounded px-2 py-2">
+          <Input type="text" inputMode="decimal" value={value||''} onChange={e=>onChange(onlyNum(e.target.value))} style={{textAlign:'right'}}/>
+          <span className="ml-2">%</span>
+        </div>
+      </div>
+    );
+    const CardTotal = ({label, value}) => (
+      <div className="text-center border-2 border-black rounded py-3 bg-white">
+        <div className="text-xs font-bold mb-1 uppercase">{label}</div>
+        <div className="text-2xl font-bold">{value}</div>
+      </div>
+    );
 
     function NamesWithPills({role, count, names, per, onSet}) {
       if (num(count)<=0) return null;
-
       const roleMeta = {
-        vet: { icon:'🛡️', title:'VETS — Enter Vet Names', header:'role-vet', band:'band-vet', placeholder:'Vet Name #' },
-        rep: { icon:'📣', title:'REPS — Enter Rep Names', header:'role-rep', band:'band-rep', placeholder:'Rep Name #' },
-        ra : { icon:'🚗', title:'RIDE-ALONGS — Enter Ride-Along Names', header:'role-ra', band:'band-ra', placeholder:'Ride-Along Name #' },
+        vet: { icon:'🛡️', title:'VETS — Enter Vet Names', placeholder:'Vet Name #' },
+        rep: { icon:'📣', title:'REPS — Enter Rep Names', placeholder:'Rep Name #' },
+        ra : { icon:'🚗', title:'RIDE-ALONGS — Enter Ride-Along Names', placeholder:'Ride-Along Name #' },
       }[role];
 
-      return h('div',{},[
-        h('div',{className:`role-header ${roleMeta.header}`},[
-          h('span',{},roleMeta.icon),
-          h('span',{},roleMeta.title)
-        ]),
-        h('div',{className:`role-band ${roleMeta.band}`}),
-        h('div',{className:'text-[12px] text-gray-700 mb-2'},
-          `Creates ${count} name field${num(count)>1?'s':''} below. Type each ${role==='ra'?'ride-along':'person'}’s name.`),
-        ...fit(names,count).map((name,i)=>h('div',{key:i, className:'pill '+(role==='ra'?'pill-red':'pill-purple')+' mb-2'},[
-          Input({
-            type:'text',
-            value:name||'',
-            placeholder:`${roleMeta.placeholder}${i+1}`,
-            onChange:(e)=>onSet(i, e.target.value),
-            className:'flex-1 px-2 py-1 border-0 outline-none'
-          }),
-          h('div',{className:'amt'}, fmt(per))
-        ]))
-      ]);
+      return (
+        <div>
+          <div className={`flex items-center gap-2 font-extrabold uppercase ${role==='vet'?'text-emerald-800':role==='rep'?'text-violet-900':'text-red-900'}`}>
+            <span>{roleMeta.icon}</span><span>{roleMeta.title}</span>
+          </div>
+          <div className={`h-1.5 my-2 rounded-full ${role==='vet'?'bg-emerald-500':role==='rep'?'bg-violet-300':'bg-red-400'}`}></div>
+          <div className="text-[12px] text-gray-700 mb-2">Creates {count} name field{num(count)>1?'s':''} below.</div>
+          {fit(names,count).map((name,i)=>(
+            <div key={i} className={`pill ${role==='ra'?'ra':''} mb-2`}>
+              <input
+                type="text"
+                value={name||''}
+                placeholder={`${roleMeta.placeholder}${i+1}`}
+                onChange={e=>onSet(i, e.target.value)}
+                className="flex-1 px-2 py-1 border-0 outline-none"
+              />
+              <div className="amt">{fmt(per)}</div>
+            </div>
+          ))}
+        </div>
+      );
     }
 
-    function CardTotal({label, value}) {
-      return h('div',{className:'text-center border-2 border-black rounded py-3 bg-white'},[
-        h('div',{className:'text-xs font-bold mb-1 uppercase'},label),
-        h('div',{className:'text-2xl font-bold'}, value)
-      ]);
-    }
-
-    /* -------- Calculator card -------- */
+    /* ---------- Calculator Card ---------- */
     function CalcCard({row,index,rows,setRows,onPrint}) {
       const c = useMemo(()=>compute(row), [row]);
 
@@ -335,95 +341,131 @@
         });
       };
 
-      return h('div',{className:'bg-white rounded-lg border-4 border-gray-300 mb-6'},[
-        h('div',{className:'bg-blue-300 py-2 px-3 border-b-2 border-black flex items-center justify-between rounded-t'},[
-          h('div',{className:'text-sm font-bold uppercase'} ,`CALCULATOR #${index+1}`),
-          h('button',{className:'bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded', onClick:()=>onPrint(index)},'Print')
-        ]),
+      return (
+        <div className="bg-white rounded-lg border-4 border-gray-300 mb-6">
+          <div className="bg-blue-300 py-2 px-3 border-b-2 border-black flex items-center justify-between rounded-t">
+            <div className="text-sm font-bold uppercase">CALCULATOR #{index+1}</div>
+            <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded"
+                    onClick={()=>onPrint(index)}>Print</button>
+          </div>
 
-        h('div',{className:'grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 border-b-2 border-black'},[
-          h('div',{},[ h('label',{className:'text-xs font-bold block mb-1 uppercase'},'Customer Name'),
-            h('input',{type:'text', value:row.customerName||'', onChange:(e)=>upd('customerName', e.target.value),
-              className:'w-full px-2 py-1 border-2 border-black rounded'}) ]),
-          h('div',{},[ h('label',{className:'text-xs font-bold block mb-1 uppercase'},'Job Number'),
-            h('input',{type:'text', value:row.jobNumber||'', onChange:(e)=>upd('jobNumber', e.target.value),
-              className:'w-full px-2 py-1 border-2 border-black rounded'}) ])
-        ]),
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 border-b-2 border-black">
+            <div>
+              <label className="text-xs font-bold block mb-1 uppercase">Customer Name</label>
+              <input type="text" value={row.customerName||''}
+                     onChange={e=>upd('customerName', e.target.value)}
+                     className="w-full px-2 py-1 border-2 border-black rounded"/>
+            </div>
+            <div>
+              <label className="text-xs font-bold block mb-1 uppercase">Job Number</label>
+              <input type="text" value={row.jobNumber||''}
+                     onChange={e=>upd('jobNumber', e.target.value)}
+                     className="w-full px-2 py-1 border-2 border-black rounded"/>
+            </div>
+          </div>
 
-        h('div',{className:'p-4 grid grid-cols-1 md:grid-cols-2 gap-4'},[
-          h('div',{},[
-            h('div',{className:'grid grid-cols-1 md:grid-cols-3 gap-4'},[
-              MoneyInput({label:'Contract Amount', value:row.contractAmount, onChange:(v)=>upd('contractAmount', v)}),
-              MoneyInput({label:'Cash/Check', value:row.cashCheck, onChange:(v)=>upd('cashCheck', v)}),
-              MoneyInput({label:'Labor & Material', value:row.laborMaterial, onChange:(v)=>upd('laborMaterial', v)}),
-            ]),
-            h('div',{className:'mt-4 grid grid-cols-1 md:grid-cols-2 gap-4'},[
-              h('div',{},[
-                MoneyInput({label:'Finance Amount', value:row.financeAmount, onChange:(v)=>upd('financeAmount', v)}),
-                PercentInput({label:'Dealer Fee (%)', value:row.dealerFee, onChange:(v)=>upd('dealerFee', v)}),
-                h('div',{className:'text-center text-sm font-bold text-green-700 mt-1'}, fmt(c.dealerFeeAmt))
-              ]),
-              h('div',{},[
-                MoneyInput({label:'Credit Card', value:row.creditCard, onChange:(v)=>upd('creditCard', v)}),
-                PercentInput({label:'CC Fee (%)', value:row.creditCardFee, onChange:(v)=>upd('creditCardFee', v)}),
-                h('div',{className:'text-center text-sm font-bold text-green-700 mt-1'}, fmt(c.ccFeeAmt))
-              ])
-            ])
-          ]),
-          h('div',{},[
-            h('div',{className:'grid grid-cols-1 md:grid-cols-3 gap-4'},[
-              h('div',{},[
-                PercentInput({label:'House Fee (%)', value:row.houseFeePercent, onChange:(v)=>upd('houseFeePercent', v)}),
-                h('div',{className:'text-center text-sm mt-2'}, 'House: '+fmt(c.houseFee)),
-                h('div',{className:'text-[11px] text-center text-gray-600 mt-1'},'Auto: 10% ≤ $20k; 9% ≤ $30k; 8% > $30k')
-              ]),
-              h('div',{},[
-                MoneyInput({label:'Ride Along Fee', value:row.rideAlong, onChange:(v)=>upd('rideAlong', v)}),
-                h('div',{className:'text-center text-sm mt-2'}, 'Per Person Split: '+fmt((num(row.rideAlong)/(num(row.numVets)+num(row.numReps) || 1))))
-              ]),
-              MoneyInput({label:'Ride Along Bonus', value:row.rideAlongBonus, onChange:(v)=>upd('rideAlongBonus', v)})
-            ]),
-            h('div',{className:'mt-4 grid grid-cols-1 md:grid-cols-3 gap-4'},[
-              CardTotal({label:'Total After Fees', value:fmt(c.afterFees)}),
-              CardTotal({label:'Vets %', value:c.vetPct+'%'}),
-              CardTotal({label:'Reps %', value:c.repPct+'%'})
-            ])
-          ])
-        ]),
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <MoneyInput label="Contract Amount" value={row.contractAmount} onChange={v=>upd('contractAmount', v)} />
+                <MoneyInput label="Cash/Check" value={row.cashCheck} onChange={v=>upd('cashCheck', v)} />
+                <MoneyInput label="Labor & Material" value={row.laborMaterial} onChange={v=>upd('laborMaterial', v)} />
+              </div>
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <MoneyInput label="Finance Amount" value={row.financeAmount} onChange={v=>upd('financeAmount', v)} />
+                  <PercentInput label="Dealer Fee (%)" value={row.dealerFee} onChange={v=>upd('dealerFee', v)} />
+                  <div className="text-center text-sm font-bold text-green-700 mt-1">{fmt(c.dealerFeeAmt)}</div>
+                </div>
+                <div>
+                  <MoneyInput label="Credit Card" value={row.creditCard} onChange={v=>upd('creditCard', v)} />
+                  <PercentInput label="CC Fee (%)" value={row.creditCardFee} onChange={v=>upd('creditCardFee', v)} />
+                  <div className="text-center text-sm font-bold text-green-700 mt-1">{fmt(c.ccFeeAmt)}</div>
+                </div>
+              </div>
+            </div>
 
-        /* Role sections with very clear naming areas */
-        h('div',{className:'px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-8'},[
-          h('div',{},[
-            h('label',{className:'text-xs font-bold block mb-1 uppercase'},'Vets on Contract'),
-            h('input',{type:'text', inputMode:'numeric', value:row.numVets||'', onChange:(e)=>upd('numVets', e.target.value),
-              className:'w-full px-2 py-1 border-2 border-black rounded', placeholder:'How many VETS?'}),
-            num(row.numVets)>0 ? h('div',{className:'mt-2 text-[12px] text-gray-700'} ,`Creates ${row.numVets} Vet name field(s) below.`) : null,
-            num(row.numVets)>0 ? h('div',{className:'mt-3 text-sm font-bold text-center'} ,'Per Vet: '+fmt(c.perVet)) : null,
-            h(NamesWithPills,{role:'vet', count:row.numVets, names:fit(row.vetNames,row.numVets), per:c.perVet,
-              onSet:(i,val)=>setName('vet',i,val)})
-          ]),
-          h('div',{},[
-            h('label',{className:'text-xs font-bold block mb-1 uppercase'},'Reps on Contract'),
-            h('input',{type:'text', inputMode:'numeric', value:row.numReps||'', onChange:(e)=>upd('numReps', e.target.value),
-              className:'w-full px-2 py-1 border-2 border-black rounded', placeholder:'How many REPS?'}),
-            num(row.numReps)>0 ? h('div',{className:'mt-2 text-[12px] text-gray-700'} ,`Creates ${row.numReps} Rep name field(s) below.`) : null,
-            num(row.numReps)>0 ? h('div',{className:'mt-3 text-sm font-bold text-center'} ,'Per Rep: '+fmt(c.perRep)) : null,
-            h(NamesWithPills,{role:'rep', count:row.numReps, names:fit(row.repNames,row.numReps), per:c.perRep,
-              onSet:(i,val)=>setName('rep',i,val)})
-          ]),
-          h('div',{},[
-            h('label',{className:'text-xs font-bold block mb-1 uppercase'},'Ride-Alongs'),
-            h('input',{type:'text', inputMode:'numeric', value:row.numRideAlongs||'', onChange:(e)=>upd('numRideAlongs', e.target.value),
-              className:'w-full px-2 py-1 border-2 border-black rounded', placeholder:'How many RIDE-ALONGS?'}),
-            num(row.numRideAlongs)>0 ? h('div',{className:'mt-2 text-[12px] text-gray-700'} ,`Creates ${row.numRideAlongs} Ride-Along name field(s) below.`) : null,
-            num(row.numRideAlongs)>0 ? h('div',{className:'mt-3 text-sm font-bold text-center'} ,'Per RA: '+fmt(c.perRA)) : null,
-            h(NamesWithPills,{role:'ra', count:row.numRideAlongs, names:fit(row.rideAlongNames,row.numRideAlongs), per:c.perRA,
-              onSet:(i,val)=>setName('ra',i,val)})
-          ])
-        ])
-      ]);
+            <div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <PercentInput label="House Fee (%)" value={row.houseFeePercent} onChange={v=>upd('houseFeePercent', v)} />
+                  <div className="text-center text-sm mt-2">House: {fmt(c.houseFee)}</div>
+                  <div className="text-[11px] text-center text-gray-600 mt-1">Auto: 10% ≤ $20k; 9% ≤ $30k; 8% &gt; $30k</div>
+                </div>
+                <div>
+                  <MoneyInput label="Ride Along Fee" value={row.rideAlong} onChange={v=>upd('rideAlong', v)} />
+                  <div className="text-center text-sm mt-2">
+                    Per Person Split: {fmt((num(row.rideAlong)/(num(row.numVets)+num(row.numReps) || 1)))}
+                  </div>
+                </div>
+                <MoneyInput label="Ride Along Bonus" value={row.rideAlongBonus} onChange={v=>upd('rideAlongBonus', v)} />
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <CardTotal label="Total After Fees" value={fmt(c.afterFees)} />
+                <CardTotal label="Vets %" value={`${c.vetPct}%`} />
+                <CardTotal label="Reps %" value={`${c.repPct}%`} />
+              </div>
+            </div>
+          </div>
+
+          <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div>
+              <label className="text-xs font-bold block mb-1 uppercase">Vets on Contract</label>
+              <input type="text" inputMode="numeric" value={row.numVets||''}
+                     onChange={e=>upd('numVets', e.target.value)}
+                     placeholder="How many VETS?"
+                     className="w-full px-2 py-1 border-2 border-black rounded"/>
+              {num(row.numVets)>0 && <div className="mt-2 text-[12px] text-gray-700">Creates {row.numVets} Vet name field(s) below.</div>}
+              {num(row.numVets)>0 && <div className="mt-3 text-sm font-bold text-center">Per Vet: {fmt(compute(row).perVet)}</div>}
+              <NamesWithPills
+                role="vet"
+                count={row.numVets}
+                names={fit(row.vetNames,row.numVets)}
+                per={compute(row).perVet}
+                onSet={(i,val)=>setName('vet',i,val)}
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold block mb-1 uppercase">Reps on Contract</label>
+              <input type="text" inputMode="numeric" value={row.numReps||''}
+                     onChange={e=>upd('numReps', e.target.value)}
+                     placeholder="How many REPS?"
+                     className="w-full px-2 py-1 border-2 border-black rounded"/>
+              {num(row.numReps)>0 && <div className="mt-2 text-[12px] text-gray-700">Creates {row.numReps} Rep name field(s) below.</div>}
+              {num(row.numReps)>0 && <div className="mt-3 text-sm font-bold text-center">Per Rep: {fmt(compute(row).perRep)}</div>}
+              <NamesWithPills
+                role="rep"
+                count={row.numReps}
+                names={fit(row.repNames,row.numReps)}
+                per={compute(row).perRep}
+                onSet={(i,val)=>setName('rep',i,val)}
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold block mb-1 uppercase">Ride-Alongs</label>
+              <input type="text" inputMode="numeric" value={row.numRideAlongs||''}
+                     onChange={e=>upd('numRideAlongs', e.target.value)}
+                     placeholder="How many RIDE-ALONGS?"
+                     className="w-full px-2 py-1 border-2 border-black rounded"/>
+              {num(row.numRideAlongs)>0 && <div className="mt-2 text-[12px] text-gray-700">Creates {row.numRideAlongs} Ride-Along name field(s) below.</div>}
+              {num(row.numRideAlongs)>0 && <div className="mt-3 text-sm font-bold text-center">Per RA: {fmt(compute(row).perRA)}</div>}
+              <NamesWithPills
+                role="ra"
+                count={row.numRideAlongs}
+                names={fit(row.rideAlongNames,row.numRideAlongs)}
+                per={compute(row).perRA}
+                onSet={(i,val)=>setName('ra',i,val)}
+              />
+            </div>
+          </div>
+        </div>
+      );
     }
 
+    /* ---------- App ---------- */
     function App(){
       const blank = ()=>({
         id: Date.now()+Math.random(),
@@ -439,24 +481,35 @@
 
       const [rows, setRows] = useState([blank()]);
 
-      const printOne   = (i)=> openPrint(buildSingle(rows[i], i), 'Calculator '+(i+1));
-      const printReport= ()=> openPrint(buildReport(rows), 'Payout Report');
+      const printOne = (i)=> openPrint(buildSingle(rows[i], i), 'Calculator '+(i+1));
+      const printReport = ()=> openPrint(buildReport(rows), 'Payout Report');
 
-      return h('div',{className:'max-w-6xl mx-auto p-4'},[
-        h('div',{className:'bg-white rounded-lg shadow-lg p-4 mb-4 border-4 border-blue-500'},[
-          h('div',{className:'flex items-center justify-between flex-wrap gap-3'},[
-            h('h1',{className:'text-xl font-bold text-blue-800'},'ALTA CAL PROFIT SHARE'),
-            h('div',{className:'flex gap-2'},[
-              h('button',{className:'bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded', onClick:printReport},'Print Report'),
-              h('button',{className:'bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded', onClick:()=>setRows(r=>[...r, blank()])},'Add File')
-            ])
-          ])
-        ]),
-        ...rows.map((row,i)=>h(CalcCard,{key:row.id, row, index:i, rows, setRows, onPrint:printOne}))
-      ]);
+      return (
+        <div className="max-w-6xl mx-auto p-4">
+          <div className="bg-white rounded-lg shadow-lg p-4 mb-4 border-4 border-blue-500">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <h1 className="text-xl font-bold text-blue-800">ALTA CAL PROFIT SHARE</h1>
+              <div className="flex gap-2">
+                <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                        onClick={printReport}>
+                  Print Report
+                </button>
+                <button className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+                        onClick={()=>setRows(r=>[...r, blank()])}>
+                  Add File
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {rows.map((row,i)=>(
+            <CalcCard key={row.id} row={row} index={i} rows={rows} setRows={setRows} onPrint={printOne}/>
+          ))}
+        </div>
+      );
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
