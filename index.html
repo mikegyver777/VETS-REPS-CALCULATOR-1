@@ -14,32 +14,24 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <style>
-    /* Screen overlays */
-    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.55);
       display: flex; align-items: center; justify-content: center; z-index: 50; padding: 1rem; }
     .paper { background: #fff; border-radius: .5rem; padding: 1rem; max-height: 90vh; overflow: auto; }
 
-    /* PRINT: legal portrait, bigger text, and top offset spacer */
+    /* PRINT: fit one Letter page, compact readable fonts, no “profit” anywhere */
     @media print {
-      @page { size: legal portrait; margin: 0.5in; } /* larger margins for accountant readability */
+      @page { size: letter portrait; margin: 0.5in; }
       html, body { height: 100%; background: #fff !important; }
       .no-print { display: none !important; }
-
       .overlay { position: static !important; background: transparent !important; padding: 0 !important; }
-      .paper { max-height: unset !important; overflow: visible !important; width: 100% !important;
+      .paper { width: 7.5in !important; max-height: unset !important; overflow: visible !important;
                padding: 0 !important; border: none !important; border-radius: 0 !important; }
 
-      /* Global print typography */
-      .print-block { font-size: 13px; line-height: 1.3; }
-      .print-heading { margin-bottom: 10px !important; }
-      .print-table th, .print-table td { padding: 4px 6px !important; font-size: 12px !important; }
-      .print-table th { background:#e5e7eb !important; }
-
-      /* Individual print—larger titles */
-      .print-title { font-size: 20px !important; }
-      .print-subtitle { font-size: 16px !important; }
-      .print-big { font-size: 16px !important; font-weight: 700 !important; }
-      .print-offset-top { height: 0.4in; } /* pushes content down from top-of-page */
+      .print-block { font-size: 12px; line-height: 1.35; }
+      .print-title { font-size: 18px !important; margin-bottom: 10px !important; }
+      .print-subtitle { font-size: 14px !important; }
+      .print-table th, .print-table td { font-size: 11px !important; padding: 4px 6px !important; }
+      .print-chip { font-size: 12px !important; padding: 6px 8px !important; }
     }
   </style>
 </head>
@@ -53,7 +45,6 @@
     const pctFee = (amount, feePct) => (num(amount) * (num(feePct)/100));
     const onlyNum = s => (s||'').replace(/[^0-9.]/g,'');
     const onlyInt = s => (s||'').replace(/[^0-9]/g,'');
-
     const fit = (arr, count) => {
       const c = Math.max(0, parseInt(count||0,10)||0);
       const base = Array.isArray(arr) ? [...arr] : [];
@@ -70,8 +61,13 @@
     };
 
     function calcOne(d){
+      // Use effective house pct (auto if not manually set)
+      const effectiveHousePct = d.houseFeeManual
+        ? num(d.houseFeePercent)
+        : (d.houseFeePercent ? num(d.houseFeePercent) : defaultHousePct(d.contractAmount));
+
       const contract     = num(d.contractAmount);
-      const housePct     = num(d.houseFeePercent);
+      const housePct     = effectiveHousePct;
       const houseFee     = (contract * housePct)/100;
 
       const dealerFeeAmt = pctFee(d.financeAmount, d.dealerFee);
@@ -148,7 +144,7 @@
         contractAmount:'', cashCheck:'',
         financeAmount:'', dealerFee:'',
         creditCard:'', creditCardFee:'',
-        houseFeePercent:'', houseFeeManual:false, /* stops auto-default after user edits */
+        houseFeePercent:'', houseFeeManual:false,
         laborMaterial:'',
         rideAlong:'', rideAlongBonus:'',
         numVets:'', numReps:'', numRideAlongs:'',
@@ -158,6 +154,24 @@
       const [rows, setRows] = React.useState([ blank() ]);
       const [showPrintAll, setShowPrintAll] = React.useState(false);
       const [printIndex, setPrintIndex] = React.useState(null);
+
+      /* Safety net: if House % is empty and not manual, auto-fill it */
+      React.useEffect(()=>{
+        setRows(prev=>{
+          let changed = false;
+          const next = prev.map(r=>{
+            if (!r.houseFeeManual) {
+              const want = String(defaultHousePct(r.contractAmount));
+              if (!r.houseFeePercent || r.houseFeePercent !== want) {
+                changed = true;
+                return { ...r, houseFeePercent: want };
+              }
+            }
+            return r;
+          });
+          return changed ? next : prev;
+        });
+      }, [rows.length]); // run on mount and when rows added/removed
 
       const upd = (idx, key, val) => {
         setRows(r => {
@@ -222,7 +236,6 @@
             const c = calcOne(row);
             return (
               <div key={row.id} className="bg-white border-4 border-gray-300 rounded-lg mb-6">
-                {/* header */}
                 <div className="bg-blue-300 border-b-2 border-black px-4 py-2 flex justify-between items-center">
                   <strong>CALCULATOR #{idx+1}</strong>
                   <button className="bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1"
@@ -231,43 +244,54 @@
                   </button>
                 </div>
 
-                {/* top row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 border-b-2 border-black">
                   <Labeled label="CUSTOMER NAME" value={row.customerName} onChange={v=>upd(idx,'customerName',v)}/>
                   <Labeled label="JOB NUMBER"    value={row.jobNumber}    onChange={v=>upd(idx,'jobNumber',v)}/>
                 </div>
 
-                {/* money inputs */}
                 <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Money   label="CONTRACT AMOUNT" value={row.contractAmount} onChange={v=>upd(idx,'contractAmount',v)}/>
-                  <Money   label="CASH/CHECK"      value={row.cashCheck}      onChange={v=>upd(idx,'cashCheck',onlyNum(v))}/>
-                  <Money   label="LABOR & MATERIAL" value={row.laborMaterial}  onChange={v=>upd(idx,'laborMaterial',onlyNum(v))}/>
+                  <Money   label="CONTRACT AMOUNT" value={row.contractAmount}
+                           onChange={v=>upd(idx,'contractAmount',v)}
+                           onBlur={()=>upd(idx,'contractAmount',row.contractAmount)}/>
+                  <Money   label="CASH/CHECK"      value={row.cashCheck}
+                           onChange={v=>upd(idx,'cashCheck',onlyNum(v))}/>
+                  <Money   label="LABOR & MATERIAL" value={row.laborMaterial}
+                           onChange={v=>upd(idx,'laborMaterial',onlyNum(v))}/>
                 </div>
 
                 <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="border-2 rounded p-3">
-                    <Money label="FINANCE AMOUNT" value={row.financeAmount} onChange={v=>upd(idx,'financeAmount',onlyNum(v))}/>
-                    <Pct   label="DEALER FEE (%)" value={row.dealerFee}     onChange={v=>upd(idx,'dealerFee',onlyNum(v))}/>
+                    <Money label="FINANCE AMOUNT" value={row.financeAmount}
+                           onChange={v=>upd(idx,'financeAmount',onlyNum(v))}/>
+                    <Pct   label="DEALER FEE (%)" value={row.dealerFee}
+                           onChange={v=>upd(idx,'dealerFee',onlyNum(v))}/>
                     <div className="text-sm text-center font-bold mt-1">{fmt(c.dealerFeeAmt)}</div>
                   </div>
                   <div className="border-2 rounded p-3">
-                    <Money label="CREDIT CARD" value={row.creditCard} onChange={v=>upd(idx,'creditCard',onlyNum(v))}/>
-                    <Pct   label="CC FEE (%)"  value={row.creditCardFee} onChange={v=>upd(idx,'creditCardFee',onlyNum(v))}/>
+                    <Money label="CREDIT CARD" value={row.creditCard}
+                           onChange={v=>upd(idx,'creditCard',onlyNum(v))}/>
+                    <Pct   label="CC FEE (%)"  value={row.creditCardFee}
+                           onChange={v=>upd(idx,'creditCardFee',onlyNum(v))}/>
                     <div className="text-sm text-center font-bold mt-1">{fmt(c.ccFeeAmt)}</div>
                   </div>
                 </div>
 
                 <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="border-2 rounded p-3">
-                    <Pct label="HOUSE FEE (%)" value={row.houseFeePercent} onChange={v=>upd(idx,'houseFeePercent',v)}/>
+                    <Pct label="HOUSE FEE (%)" value={row.houseFeePercent}
+                         onChange={v=>upd(idx,'houseFeePercent',v)}/>
                     <div className="text-center text-lg font-bold mt-1">House: {fmt(c.houseFee)}</div>
                     <div className="text-xs text-center text-gray-600 mt-1">Auto: 10% ≤ $20k; 9% $20k–$30k; 8% ≥ $30k</div>
                   </div>
                   <div className="border-2 rounded p-3">
-                    <Money label="RIDE ALONG FEE" value={row.rideAlong} onChange={v=>upd(idx,'rideAlong',onlyNum(v))}/>
-                    <div className="text-center text-sm font-bold mt-1">Per Person Split: {fmt((num(row.rideAlong)/(num(row.numVets)+num(row.numReps)||1)))}</div>
+                    <Money label="RIDE ALONG FEE" value={row.rideAlong}
+                           onChange={v=>upd(idx,'rideAlong',onlyNum(v))}/>
+                    <div className="text-center text-sm font-bold mt-1">
+                      Per Person Split: {fmt((num(row.rideAlong)/(num(row.numVets)+num(row.numReps)||1)))}
+                    </div>
                   </div>
-                  <Money label="RIDE ALONG BONUS" value={row.rideAlongBonus} onChange={v=>upd(idx,'rideAlongBonus',onlyNum(v))}/>
+                  <Money label="RIDE ALONG BONUS" value={row.rideAlongBonus}
+                         onChange={v=>upd(idx,'rideAlongBonus',onlyNum(v))}/>
                 </div>
 
                 <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -276,7 +300,6 @@
                   <Stat title="REPS %" value={`${c.repRate}%`}/>
                 </div>
 
-                {/* Counts + Names with amounts */}
                 <div className="p-4 space-y-6">
                   <Group
                     label="VETS ON CONTRACT" count={row.numVets} setCount={v=>upd(idx,'numVets',v)}
@@ -298,10 +321,8 @@
             );
           })}
 
-          {/* PRINT ALL */}
           {showPrintAll && <PrintAll rows={rows} onClose={()=>setShowPrintAll(false)}/>}
 
-          {/* PRINT SINGLE (bigger text + top offset) */}
           {printIndex!==null && <PrintOne row={rows[printIndex]} index={printIndex} onClose={()=>setPrintIndex(null)}/>}
         </div>
       );
@@ -314,11 +335,12 @@
         <input className="w-full border-2 rounded px-2 py-2" value={value||''} onChange={e=>onChange(e.target.value)}/>
       </div>
     );
-    const Money = ({label,value,onChange}) => (
+    const Money = ({label,value,onChange,onBlur}) => (
       <div>
         <label className="text-xs font-bold block mb-1">{label}</label>
         <div className="flex items-center border-2 rounded px-2 py-2"><span className="mr-1">$</span>
-          <input className="w-full text-right outline-none" value={value||''} onChange={e=>onChange(e.target.value)} inputMode="decimal"/>
+          <input className="w-full text-right outline-none" value={value||''}
+                 onChange={e=>onChange(e.target.value)} onBlur={onBlur} inputMode="decimal"/>
         </div>
       </div>
     );
@@ -326,7 +348,8 @@
       <div>
         <label className="text-xs font-bold block mb-1">{label}</label>
         <div className="flex items-center border-2 rounded px-2 py-2">
-          <input className="w-full text-right outline-none" value={value||''} onChange={e=>onChange(e.target.value)} inputMode="decimal"/>
+          <input className="w-full text-right outline-none" value={value||''}
+                 onChange={e=>onChange(e.target.value)} inputMode="decimal"/>
           <span className="ml-1">%</span>
         </div>
       </div>
@@ -381,7 +404,7 @@
       );
     }
 
-    /* ============== PRINT: REPORT (unchanged profit-less) ============== */
+    /* ============== PRINT: REPORT (no profit) ============== */
     function PrintAll({rows, onClose}){
       const rowData = rows.map((row, idx) => {
         const c = calcOne(row);
@@ -413,7 +436,7 @@
       return (
         <div className="overlay">
           <div className="paper print-block w-full max-w-6xl">
-            <h2 className="text-xl font-bold text-center mb-3 print-heading">ALTA CAL PROFIT SHARE — PAYOUT REPORT</h2>
+            <h2 className="text-xl font-bold text-center mb-3 print-title">ALTA CAL — PAYOUT REPORT</h2>
 
             <table className="w-full border-2 border-black print-table mb-4">
               <thead>
@@ -516,7 +539,7 @@
       );
     }
 
-    /* ============== PRINT: INDIVIDUAL (bigger + offset) ============== */
+    /* ============== PRINT: INDIVIDUAL (fits one page, no profit) ============== */
     function PrintOne({row, index, onClose}){
       const c   = calcOne(row);
       const vets= fit(row.vetNames, row.numVets);
@@ -525,13 +548,12 @@
 
       return (
         <div className="overlay">
-          <div className="paper print-block w-full max-w-[8.5in]">
-            <div className="print-offset-top"></div> {/* top spacer on print */}
-            <h2 className="print-title font-bold text-center mb-3 print-heading">ALTA CAL — CALCULATOR #{index+1}</h2>
+          <div className="paper print-block w-full max-w-[7.8in]">
+            <h2 className="print-title font-bold text-center mb-3">ALTA CAL — CALCULATOR #{index+1}</h2>
 
             <div className="mb-3 grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded border">
-              <div><span className="font-semibold">Customer:</span> <span className="print-big">{row.customerName || 'N/A'}</span></div>
-              <div><span className="font-semibold">Job#:</span> <span className="print-big">{row.jobNumber || 'N/A'}</span></div>
+              <div><span className="font-semibold">Customer:</span> <span className="font-semibold">{row.customerName || 'N/A'}</span></div>
+              <div><span className="font-semibold">Job#:</span> <span className="font-semibold">{row.jobNumber || 'N/A'}</span></div>
             </div>
 
             <div className="mb-4 bg-blue-50 border-2 border-blue-400 rounded p-3">
@@ -551,15 +573,15 @@
             <div className="mb-4 grid grid-cols-3 gap-3">
               <div className="border rounded p-2 text-center">
                 <div className="text-xs font-bold">VETS %</div>
-                <div className="print-big">{c.vetRate}%</div>
+                <div className="print-chip font-semibold">{c.vetRate}%</div>
               </div>
               <div className="border rounded p-2 text-center">
                 <div className="text-xs font-bold">REPS %</div>
-                <div className="print-big">{c.repRate}%</div>
+                <div className="print-chip font-semibold">{c.repRate}%</div>
               </div>
               <div className="border rounded p-2 text-center">
                 <div className="text-xs font-bold">MARGIN %</div>
-                <div className="print-big">{(c.marginPct||0).toFixed(1)}%</div>
+                <div className="print-chip font-semibold">{(c.marginPct||0).toFixed(1)}%</div>
               </div>
             </div>
 
@@ -602,11 +624,11 @@
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div className="bg-green-50 border border-green-400 rounded p-3 text-center">
                 <div className="text-xs font-bold">COMBINED PAYOUT</div>
-                <div className="print-big">{fmt(c.combined)}</div>
+                <div className="font-semibold text-lg">{fmt(c.combined)}</div>
               </div>
               <div className="bg-blue-50 border border-blue-400 rounded p-3 text-center">
                 <div className="text-xs font-bold">TOTAL AFTER FEES</div>
-                <div className="print-big">{fmt(c.afterFees)}</div>
+                <div className="font-semibold text-lg">{fmt(c.afterFees)}</div>
               </div>
             </div>
 
